@@ -1,35 +1,54 @@
 import 'package:flutter/material.dart';
-import 'package:social_app/views/home/home_screen.dart';
+import 'package:go_router/go_router.dart';
+import 'package:social_app/core/router/routes.dart';
+import 'package:social_app/repositories/onboarding_repository.dart';
 import 'package:adaptive_theme/adaptive_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final savedThemeMode = await AdaptiveTheme.getThemeMode();
+  final hasSeenOnboarding = await OnboardingRepository().hasSeenOnboarding();
+  final router = buildRouter(
+    initialLocation: hasSeenOnboarding ? '/login' : '/',
+  );
+  runApp(MyApp(savedThemeMode: savedThemeMode, router: router));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.savedThemeMode, required this.router});
+
+  final AdaptiveThemeMode? savedThemeMode;
+  final GoRouter router;
 
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
+    final lightTheme = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      colorSchemeSeed: Color.fromARGB(255, 7, 147, 241),
+    );
+    final darkTheme = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorSchemeSeed: Color.fromARGB(255, 4, 26, 41),
+    );
+
     return AdaptiveTheme(
-      light: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        colorSchemeSeed: Color.fromARGB(255, 7, 147, 241),
+      light: lightTheme.copyWith(
+        textTheme: GoogleFonts.robotoTextTheme(lightTheme.textTheme),
       ),
-      dark: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        colorSchemeSeed: Color.fromARGB(255, 4, 26, 41),
+      dark: darkTheme.copyWith(
+        textTheme: GoogleFonts.robotoTextTheme(darkTheme.textTheme),
       ),
-      initial: AdaptiveThemeMode.light,
-      builder: (theme, darkTheme) => MaterialApp(
+      initial: savedThemeMode ?? AdaptiveThemeMode.light,
+      builder: (theme, darkTheme) => MaterialApp.router(
         debugShowCheckedModeBanner: false,
         title: 'Community Zone',
         theme: theme,
         darkTheme: darkTheme,
-        home: const HomeScreen(),
+        routerConfig: router,
       ),
     );
   }
