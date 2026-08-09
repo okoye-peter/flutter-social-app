@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/repositories/onboarding_repository.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -89,7 +90,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _onGetStarted() async {
     await _onboardingRepository.completeOnboarding();
-    if (mounted) context.go('/login');
+    if (mounted) context.go(AppRoutes.login);
   }
 
   @override

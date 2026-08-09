@@ -33,38 +33,35 @@ class _SettingScreenState extends State<SettingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Placeholder();
-    /**
-     * Center(
-        child: Card(
-          child: SwitchListTile(
-            title: Text('Change Theme'),
-            secondary: Container(
-              height: 30,
-              width: 30,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isDarkTheme ? Colors.white : Colors.black
-              ),
-              child: Icon(
-                isDarkTheme ? Icons.nightlight_rounded : Icons.wb_sunny_rounded,
-                color: isDarkTheme ? Colors.black : Colors.white,
-              ),
+    return Center(
+      child: Card(
+        child: SwitchListTile(
+          title: const Text('Change Theme'),
+          secondary: Container(
+            height: 30,
+            width: 30,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isDarkTheme ? Colors.white : Colors.black,
             ),
-            value: isDarkTheme,
-            onChanged: (bool value) {
-              setState(() {
-                isDarkTheme = value;
-              });
-              if (value) {
-                AdaptiveTheme.of(context).setDark();
-              } else {
-                AdaptiveTheme.of(context).setLight();
-              }
-            },
+            child: Icon(
+              isDarkTheme ? Icons.nightlight_rounded : Icons.wb_sunny_rounded,
+              color: isDarkTheme ? Colors.black : Colors.white,
+            ),
           ),
+          value: isDarkTheme,
+          onChanged: (bool value) {
+            setState(() {
+              isDarkTheme = value;
+            });
+            if (value) {
+              AdaptiveTheme.of(context).setDark();
+            } else {
+              AdaptiveTheme.of(context).setLight();
+            }
+          },
         ),
       ),
-     */
+    );
   }
 }

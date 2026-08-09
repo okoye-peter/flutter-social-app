@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/router/routes.dart';
 import 'package:social_app/repositories/onboarding_repository.dart';
 import 'package:adaptive_theme/adaptive_theme.dart';
@@ -10,7 +11,9 @@ void main() async {
   final savedThemeMode = await AdaptiveTheme.getThemeMode();
   final hasSeenOnboarding = await OnboardingRepository().hasSeenOnboarding();
   final router = buildRouter(
-    initialLocation: hasSeenOnboarding ? '/login' : '/',
+    initialLocation: hasSeenOnboarding
+        ? AppRoutes.login
+        : AppRoutes.onboarding,
   );
   runApp(MyApp(savedThemeMode: savedThemeMode, router: router));
 }
