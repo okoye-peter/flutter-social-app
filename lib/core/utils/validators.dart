@@ -1,4 +1,5 @@
 final _emailRegex = RegExp(r'^[\w.+-]+@[\w-]+\.[\w.-]+$');
+final _phoneRegex = RegExp(r'^\d{7,15}$');
 
 String? validateName(String? value) {
   if (value == null || value.trim().isEmpty) return 'Enter your name';
@@ -9,6 +10,13 @@ String? validateName(String? value) {
 String? validateEmail(String? value) {
   if (value == null || value.trim().isEmpty) return 'Enter your email';
   if (!_emailRegex.hasMatch(value.trim())) return 'Enter a valid email';
+  return null;
+}
+
+String? validatePhone(String? value) {
+  if (value == null || value.trim().isEmpty) return 'Enter your phone number';
+  final digitsOnly = value.trim().replaceAll(RegExp(r'[\s-]'), '');
+  if (!_phoneRegex.hasMatch(digitsOnly)) return 'Enter a valid phone number';
   return null;
 }
 

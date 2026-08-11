@@ -1,5 +1,7 @@
+import 'package:country_picker/country_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/utils/validators.dart';
 import 'package:social_app/core/widgets/auth_scaffold.dart';
@@ -16,15 +18,29 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _agreedToTerms = false;
   bool _isLoading = false;
+  Country _selectedCountry = Country(
+    phoneCode: '234',
+    countryCode: 'NG',
+    e164Sc: 0,
+    geographic: true,
+    level: 1,
+    name: 'Nigeria',
+    example: 'Nigeria',
+    displayName: 'Nigeria',
+    displayNameNoCountryCode: 'NG',
+    e164Key: '',
+  );
 
   @override
   void dispose() {
     _nameController.dispose();
+    _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -85,6 +101,53 @@ class _RegisterScreenState extends State<RegisterScreen> {
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.name],
               validator: validateName,
+            ),
+            const SizedBox(height: 16),
+            AuthTextField(
+              controller: _phoneController,
+              label: 'Phone Number',
+              widgetIcon: InkWell(
+                onTap: () {
+                  showCountryPicker(
+                    context: context,
+                    showPhoneCode: true,
+                    onSelect: (Country country) {
+                      setState(() {
+                        _selectedCountry = country;
+                      });
+                    },
+                    countryListTheme: CountryListThemeData(
+                      backgroundColor: colorScheme.onSecondary,
+                      textStyle: GoogleFonts.openSans(fontSize: 13, fontWeight: FontWeight.w500),
+                      inputDecoration: InputDecoration(
+                        hintText: 'Search',
+                        hintStyle: GoogleFonts.openSans(fontSize: 16, fontWeight: FontWeight.w500),
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10)
+                        )
+                      ),
+                    )
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Center(
+                    widthFactor: 1,
+                    child: Text(
+                      '${_selectedCountry.flagEmoji} +${_selectedCountry.phoneCode}',
+                      style: const TextStyle(fontSize: 16),
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.visible,
+                    ),
+                  ),
+                ),
+              ),
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.telephoneNumber],
+              validator: validatePhone,
             ),
             const SizedBox(height: 16),
             AuthTextField(

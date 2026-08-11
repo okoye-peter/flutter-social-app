@@ -7,20 +7,22 @@ class AuthTextField extends StatefulWidget {
     super.key,
     required this.controller,
     required this.label,
-    required this.icon,
+    this.icon,
     this.isPassword = false,
     this.keyboardType,
     this.textInputAction,
     this.validator,
     this.autofillHints,
     this.onFieldSubmitted,
+    this.widgetIcon,
   });
 
   final TextEditingController controller;
   final String label;
-  final IconData icon;
+  final IconData? icon;
   final bool isPassword;
   final TextInputType? keyboardType;
+  final Widget? widgetIcon;
   final TextInputAction? textInputAction;
   final String? Function(String?)? validator;
   final Iterable<String>? autofillHints;
@@ -49,7 +51,7 @@ class _AuthTextFieldState extends State<AuthTextField> {
       style: const TextStyle(fontSize: 15),
       decoration: InputDecoration(
         labelText: widget.label,
-        prefixIcon: Icon(widget.icon, size: 20),
+        prefixIcon: widget.widgetIcon ?? ( widget.icon != null ? Icon(widget.icon, size: 20) : null),
         suffixIcon: widget.isPassword
             ? IconButton(
                 icon: Icon(
