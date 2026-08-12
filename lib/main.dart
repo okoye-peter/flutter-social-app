@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:social_app/core/constants/api_constants.dart';
+import 'package:social_app/core/di/service_locator.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/router/routes.dart';
 import 'package:social_app/firebase_options.dart';
@@ -15,16 +16,15 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  await NotificationService(Dio(BaseOptions(baseUrl: ApiConstants.baseUrl))).init();
+  setupLocator();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await NotificationService(
+    Dio(BaseOptions(baseUrl: ApiConstants.baseUrl)),
+  ).init();
   final savedThemeMode = await AdaptiveTheme.getThemeMode();
   final hasSeenOnboarding = await OnboardingRepository().hasSeenOnboarding();
   final router = buildRouter(
-    initialLocation: hasSeenOnboarding
-        ? AppRoutes.login
-        : AppRoutes.onboarding,
+    initialLocation: hasSeenOnboarding ? AppRoutes.login : AppRoutes.onboarding,
   );
   runApp(MyApp(savedThemeMode: savedThemeMode, router: router));
 }
