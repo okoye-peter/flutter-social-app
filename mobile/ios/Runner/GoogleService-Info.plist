@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>761632017821-79rtf4jq35ighi20anh0fff5o19fdmhp.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.761632017821-79rtf4jq35ighi20anh0fff5o19fdmhp</string>
+	<key>API_KEY</key>
+	<string>AIzaSyAzK9nmaT662T_rWXoUH45RMVceiGpBJQ8</string>
+	<key>GCM_SENDER_ID</key>
+	<string>761632017821</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.okoye.socialapp</string>
+	<key>PROJECT_ID</key>
+	<string>flutterudemychatapp-a499f</string>
+	<key>STORAGE_BUCKET</key>
+	<string>flutterudemychatapp-a499f.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:761632017821:ios:7913569ab5e82217f2f374</string>
+</dict>
+</plist>
