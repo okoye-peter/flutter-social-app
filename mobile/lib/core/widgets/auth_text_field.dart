@@ -51,7 +51,9 @@ class _AuthTextFieldState extends State<AuthTextField> {
       style: const TextStyle(fontSize: 15),
       decoration: InputDecoration(
         labelText: widget.label,
-        prefixIcon: widget.widgetIcon ?? ( widget.icon != null ? Icon(widget.icon, size: 20) : null),
+        prefixIcon:
+            widget.widgetIcon ??
+            (widget.icon != null ? Icon(widget.icon, size: 20) : null),
         suffixIcon: widget.isPassword
             ? IconButton(
                 icon: Icon(

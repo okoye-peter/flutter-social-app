@@ -1,9 +1,53 @@
 import type { Request, Response } from 'express';
 import * as authService from '../services/auth.js';
+import * as otpService from '../services/otp.js';
+import { HttpError } from '../lib/http-error.js';
 
 export async function register(req: Request, res: Response) {
-  const result = await authService.registerUser(req.body);
+  const { name, username, email, phoneNumber, password } = req.body as {
+    name?: string;
+    username?: string;
+    email?: string;
+    phoneNumber?: string;
+    password?: string;
+  };
+  const result = await authService.registerUser({
+    name,
+    username,
+    email,
+    phoneNumber,
+    password,
+    imageFile: req.file ? { buffer: req.file.buffer } : undefined,
+  });
   res.status(201).json(result);
+}
+
+export async function sendEmailOtp(req: Request, res: Response) {
+  const { email } = req.body as { email?: string };
+  if (!email) throw new HttpError(400, 'email is required');
+  await otpService.sendOtp(email.trim().toLowerCase(), 'EMAIL');
+  res.json({ message: 'Verification code sent' });
+}
+
+export async function verifyEmailOtp(req: Request, res: Response) {
+  const { email, code } = req.body as { email?: string; code?: string };
+  if (!email) throw new HttpError(400, 'email is required');
+  await otpService.verifyOtp(email.trim().toLowerCase(), 'EMAIL', code);
+  res.json({ message: 'Email verified' });
+}
+
+export async function sendPhoneOtp(req: Request, res: Response) {
+  const { phoneNumber } = req.body as { phoneNumber?: string };
+  if (!phoneNumber) throw new HttpError(400, 'phoneNumber is required');
+  await otpService.sendOtp(phoneNumber.trim(), 'PHONE');
+  res.json({ message: 'Verification code sent' });
+}
+
+export async function verifyPhoneOtp(req: Request, res: Response) {
+  const { phoneNumber, code } = req.body as { phoneNumber?: string; code?: string };
+  if (!phoneNumber) throw new HttpError(400, 'phoneNumber is required');
+  await otpService.verifyOtp(phoneNumber.trim(), 'PHONE', code);
+  res.json({ message: 'Phone number verified' });
 }
 
 export async function login(req: Request, res: Response) {

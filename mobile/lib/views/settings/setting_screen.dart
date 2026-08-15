@@ -28,6 +28,7 @@ class _SettingScreenState extends State<SettingScreen> {
   final _user = UserModel(
     id: '1',
     name: 'Alex Morgan',
+    username: 'alexmorgan',
     phoneNumber: '+2348012345678',
     image: '',
     email: '',
@@ -156,7 +157,9 @@ class _SettingScreenState extends State<SettingScreen> {
                   ),
                   title: Text(
                     'Remove photo',
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                   onTap: _removeAvatar,
                 ),

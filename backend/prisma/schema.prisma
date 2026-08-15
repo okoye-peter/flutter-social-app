@@ -20,6 +20,7 @@ model DeviceToken {
 model User {
     id          String   @id @default(cuid())
     name        String
+    username    String   @unique
     email       String   @unique
     phoneNumber String   @unique @map("phone_number")
     password    String
@@ -61,4 +62,23 @@ model RefreshToken {
 
     @@index([userId])
     @@map("refresh_tokens")
+}
+
+enum OtpChannel {
+    EMAIL
+    PHONE
+}
+
+model Otp {
+    id         String     @id @default(cuid())
+    identifier String
+    channel    OtpChannel
+    codeHash   String     @map("code_hash")
+    attempts   Int        @default(0)
+    expiresAt  DateTime   @map("expires_at")
+    verifiedAt DateTime?  @map("verified_at")
+    createdAt  DateTime   @default(now()) @map("created_at")
+
+    @@index([identifier, channel])
+    @@map("otps")
 }

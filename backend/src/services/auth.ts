@@ -1,15 +1,31 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { prisma } from '../prisma.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
+import { hashToken } from '../lib/hash.js';
 import { signAccessToken } from '../lib/jwt.js';
 import { sendMail } from '../lib/email.js';
 import { HttpError } from '../lib/http-error.js';
-import { isValidEmail, isValidName, isValidPassword, isValidPhoneNumber } from '../lib/validators.js';
+import {
+  isValidEmail,
+  isValidName,
+  isValidPassword,
+  isValidPhoneNumber,
+  isValidUsername,
+} from '../lib/validators.js';
 import { uploadImage } from './cloudinary.js';
+import { assertVerified, clearVerified } from './otp.js';
 import type { User } from '../../generated/prisma/index.js';
 
-const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// How long a password-reset link stays valid. Kept short (10 min) since a
+// leaked or forwarded reset email is a real attack window — long TTLs give
+// an attacker more time to use a token they shouldn't have.
+const RESET_TOKEN_TTL_MS = 10 * 60 * 1000;
+
+// How long a refresh token stays valid before the user has to log in again.
+// Much longer than the reset token on purpose: it's issued straight to the
+// user's own device after they've already authenticated, not sent over
+// email, so the leak risk it's guarding against is different.
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export type SafeUser = Omit<User, 'password'>;
 
@@ -20,9 +36,11 @@ export interface TokenPair {
 
 export interface RegisterInput {
   name?: string;
+  username?: string;
   email?: string;
   phoneNumber?: string;
   password?: string;
+  imageFile?: { buffer: Buffer };
 }
 
 export interface LoginInput {
@@ -39,10 +57,6 @@ export interface UpdateProfileInput {
 function toSafeUser(user: User): SafeUser {
   const { password: _password, ...safeUser } = user;
   return safeUser;
-}
-
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
 }
 
 async function issueTokenPair(userId: string): Promise<TokenPair> {
@@ -88,13 +102,16 @@ export async function logoutUser(token: string | undefined): Promise<void> {
 }
 
 export async function registerUser(input: RegisterInput): Promise<{ user: SafeUser } & TokenPair> {
-  const { name, email, phoneNumber, password } = input;
+  const { name, username, email, phoneNumber, password, imageFile } = input;
 
-  if (!name || !email || !phoneNumber || !password) {
-    throw new HttpError(400, 'name, email, phoneNumber and password are required');
+  if (!name || !username || !email || !phoneNumber || !password) {
+    throw new HttpError(400, 'name, username, email, phoneNumber and password are required');
   }
   if (!isValidName(name)) {
     throw new HttpError(400, 'Name is too short');
+  }
+  if (!isValidUsername(username)) {
+    throw new HttpError(400, '3-20 characters: letters, numbers, underscore only');
   }
   if (!isValidEmail(email)) {
     throw new HttpError(400, 'Enter a valid email');
@@ -106,21 +123,51 @@ export async function registerUser(input: RegisterInput): Promise<{ user: SafeUs
     throw new HttpError(400, 'Password must be at least 6 characters');
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedPhone = phoneNumber.trim();
+  const normalizedUsername = username.trim();
+
+  // Email and phone must already be OTP-verified before an account can be
+  // created with them — this is what the mobile registration flow's
+  // verification steps are actually gating.
+  await assertVerified(normalizedEmail, 'EMAIL');
+  await assertVerified(normalizedPhone, 'PHONE');
+
+  // Checked separately (not just OR'd into one query) so the error can name
+  // the specific field that's taken — username especially, since that's
+  // the one thing the user can immediately fix by choosing another value,
+  // unlike email/phone which they can't just retype.
   const existing = await prisma.user.findFirst({
-    where: { OR: [{ email: email.trim().toLowerCase() }, { phoneNumber: phoneNumber.trim() }] },
+    where: {
+      OR: [{ email: normalizedEmail }, { phoneNumber: normalizedPhone }, { username: normalizedUsername }],
+    },
+    select: { email: true, phoneNumber: true, username: true },
   });
   if (existing) {
-    throw new HttpError(409, 'An account with this email or phone number already exists');
+    if (existing.username === normalizedUsername) {
+      throw new HttpError(409, 'This username is already taken, please choose another one');
+    }
+    if (existing.email === normalizedEmail) {
+      throw new HttpError(409, 'An account with this email already exists');
+    }
+    throw new HttpError(409, 'An account with this phone number already exists');
   }
+
+  const image = imageFile ? await uploadImage(imageFile.buffer, 'profile-images') : undefined;
 
   const user = await prisma.user.create({
     data: {
       name: name.trim(),
-      email: email.trim().toLowerCase(),
-      phoneNumber: phoneNumber.trim(),
+      username: normalizedUsername,
+      email: normalizedEmail,
+      phoneNumber: normalizedPhone,
       password: await hashPassword(password),
+      ...(image !== undefined ? { image } : {}),
     },
   });
+
+  await clearVerified(normalizedEmail, 'EMAIL');
+  await clearVerified(normalizedPhone, 'PHONE');
 
   return { user: toSafeUser(user), ...(await issueTokenPair(user.id)) };
 }

@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:social_app/core/di/service_locator.dart';
 import 'package:social_app/core/router/app_routes.dart';
@@ -7,6 +8,7 @@ import 'package:social_app/core/router/routes.dart';
 import 'package:social_app/firebase_options.dart';
 import 'package:social_app/repositories/onboarding_repository.dart';
 import 'package:social_app/services/notification_service.dart';
+import 'package:social_app/viewmodels/auth/auth_bloc.dart';
 import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -45,20 +47,23 @@ class MyApp extends StatelessWidget {
       colorSchemeSeed: Color.fromARGB(255, 4, 26, 41),
     );
 
-    return AdaptiveTheme(
-      light: lightTheme.copyWith(
-        textTheme: GoogleFonts.robotoTextTheme(lightTheme.textTheme),
-      ),
-      dark: darkTheme.copyWith(
-        textTheme: GoogleFonts.robotoTextTheme(darkTheme.textTheme),
-      ),
-      initial: savedThemeMode ?? AdaptiveThemeMode.light,
-      builder: (theme, darkTheme) => MaterialApp.router(
-        debugShowCheckedModeBanner: false,
-        title: 'Community Zone',
-        theme: theme,
-        darkTheme: darkTheme,
-        routerConfig: router,
+    return BlocProvider<AuthBloc>(
+      create: (_) => AuthBloc(),
+      child: AdaptiveTheme(
+        light: lightTheme.copyWith(
+          textTheme: GoogleFonts.robotoTextTheme(lightTheme.textTheme),
+        ),
+        dark: darkTheme.copyWith(
+          textTheme: GoogleFonts.robotoTextTheme(darkTheme.textTheme),
+        ),
+        initial: savedThemeMode ?? AdaptiveThemeMode.light,
+        builder: (theme, darkTheme) => MaterialApp.router(
+          debugShowCheckedModeBanner: false,
+          title: 'Community Zone',
+          theme: theme,
+          darkTheme: darkTheme,
+          routerConfig: router,
+        ),
       ),
     );
   }

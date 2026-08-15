@@ -27,10 +27,7 @@ class TokenStorage {
         return null;
       }
 
-      _cache = AuthTokens(
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-      );
+      _cache = AuthTokens(accessToken: accessToken, refreshToken: refreshToken);
       return _cache;
     } catch (_) {
       // Keystore/Keychain entry can become unreadable (e.g. after biometric

@@ -117,10 +117,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 return ClipRect(
                   child: Transform.scale(
                     scale: scale,
-                    child: Image.asset(
-                      _pages[index].image,
-                      fit: BoxFit.cover,
-                    ),
+                    child: Image.asset(_pages[index].image, fit: BoxFit.cover),
                   ),
                 );
               },
@@ -223,10 +220,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       const SizedBox(height: 12),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
-                        transitionBuilder: (child, animation) => FadeTransition(
-                          opacity: animation,
-                          child: child,
-                        ),
+                        transitionBuilder: (child, animation) =>
+                            FadeTransition(opacity: animation, child: child),
                         child: Text(
                           _pages[_currentIndex].description,
                           key: ValueKey('desc_$_currentIndex'),

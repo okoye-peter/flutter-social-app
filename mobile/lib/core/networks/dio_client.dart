@@ -11,6 +11,7 @@ class DioClient {
   DioClient._();
 
   static Dio create(TokenStorage tokenStorage, UserCache userCache) {
+    print(ApiConstants.baseUrl);
     final dio = Dio(
       BaseOptions(
         baseUrl: ApiConstants.baseUrl,
@@ -57,7 +58,8 @@ class DioClient {
             }
 
             options.extra['isRetry'] = true;
-            options.headers['Authorization'] = 'Bearer ${newTokens.accessToken}';
+            options.headers['Authorization'] =
+                'Bearer ${newTokens.accessToken}';
             final response = await dio.fetch(options);
             return handler.resolve(response);
           } catch (_) {
@@ -71,7 +73,9 @@ class DioClient {
     );
 
     if (kDebugMode) {
-      dio.interceptors.add(LogInterceptor(requestBody: true, responseBody: true));
+      dio.interceptors.add(
+        LogInterceptor(requestBody: true, responseBody: true),
+      );
     }
 
     return dio;

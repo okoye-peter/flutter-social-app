@@ -70,7 +70,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '761632017821',
     projectId: 'flutterudemychatapp-a499f',
     storageBucket: 'flutterudemychatapp-a499f.firebasestorage.app',
-    iosClientId: '761632017821-79rtf4jq35ighi20anh0fff5o19fdmhp.apps.googleusercontent.com',
+    iosClientId:
+        '761632017821-79rtf4jq35ighi20anh0fff5o19fdmhp.apps.googleusercontent.com',
     iosBundleId: 'com.okoye.socialapp',
   );
 }

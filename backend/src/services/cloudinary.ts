@@ -17,3 +17,18 @@ export function uploadImage(buffer: Buffer, folder: string): Promise<string> {
     stream.end(buffer);
   });
 }
+
+// For chat attachments, which unlike profile photos aren't always images —
+// 'auto' lets Cloudinary route video/PDF/etc. to the right resource type
+// instead of us branching on mimetype ourselves.
+export function uploadAttachment(buffer: Buffer, folder: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream({ folder, resource_type: 'auto' }, (error, result) => {
+      if (error || !result) {
+        return reject(error ?? new Error('Cloudinary upload failed'));
+      }
+      resolve(result.secure_url);
+    });
+    stream.end(buffer);
+  });
+}

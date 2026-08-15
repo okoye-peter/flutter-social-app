@@ -2,6 +2,7 @@
 class UserModel {
   String id;
   String name;
+  String username;
   String email;
   String phoneNumber;
   String image;
@@ -17,6 +18,7 @@ class UserModel {
   UserModel({
     required this.id,
     required this.name,
+    required this.username,
     required this.email,
     required this.phoneNumber,
     required this.image,
@@ -34,6 +36,7 @@ class UserModel {
     return UserModel(
       id: json['id'] ?? '',
       name: json['name'] ?? '',
+      username: json['username'] ?? '',
       email: json['email'] ?? '',
       phoneNumber: json['phoneNumber'] ?? '',
       image: json['image'] ?? '',
@@ -44,14 +47,17 @@ class UserModel {
       isOnline: json['isOnline'] ?? false,
       friendsIds: List<String>.from(json['friendsIds'] ?? []),
       friendRequestsIds: List<String>.from(json['friendRequestsIds'] ?? []),
-      sentFriendRequestsIds: List<String>.from(json['sentFriendRequestsIds']  ?? []),
+      sentFriendRequestsIds: List<String>.from(
+        json['sentFriendRequestsIds'] ?? [],
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id, 
+      'id': id,
       'name': name,
+      'username': username,
       'email': email,
       'phoneNumber': phoneNumber,
       'image': image,

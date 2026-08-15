@@ -1,38 +1,48 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:social_app/core/helpers/app_toast.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/utils/formatters.dart';
 import 'package:social_app/core/widgets/auth_scaffold.dart';
 import 'package:social_app/core/widgets/otp_verification_form.dart';
+import 'package:social_app/models/registration_draft.dart';
+import 'package:social_app/viewmodels/auth/auth_bloc.dart';
 
 class EmailVerificationScreen extends StatelessWidget {
-  const EmailVerificationScreen({super.key, required this.email});
+  const EmailVerificationScreen({super.key, required this.draft});
 
-  final String email;
+  final RegistrationDraft draft;
 
   Future<String?> _onVerify(BuildContext context, String code) async {
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (!context.mounted) return null;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Email verified successfully')),
+    final state = await context.read<AuthBloc>().addAndAwait(
+      VerifyEmailOtpEvent(email: draft.email, code: code),
+      (s) => s is OtpVerifiedState,
     );
-    context.go(AppRoutes.feeds);
+    if (!context.mounted) return null;
+    if (state is AuthErrorState) return state.errorMessage;
+
+    context.push(AppRoutes.registerPhone, extra: draft);
     return null;
   }
 
   Future<void> _onResend(BuildContext context) async {
-    await Future.delayed(const Duration(milliseconds: 700));
+    final state = await context.read<AuthBloc>().addAndAwait(
+      SendEmailOtpEvent(email: draft.email),
+      (s) => s is OtpSentState,
+    );
     if (!context.mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Verification code resent')),
-    );
+    if (state is AuthErrorState) {
+      AppToast.error(state.errorMessage);
+    } else {
+      AppToast.success('Verification code resent');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final maskedEmail = maskEmail(email);
+    final maskedEmail = maskEmail(draft.email);
 
     return AuthScaffold(
       title: 'Verify your email',

@@ -1,10 +1,13 @@
 import 'package:go_router/go_router.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/widgets/home_screen.dart';
+import 'package:social_app/models/registration_draft.dart';
 import 'package:social_app/views/auth/email_veritication_screen.dart';
 import 'package:social_app/views/auth/forgot_password_screen.dart';
 import 'package:social_app/views/auth/login_screen.dart';
 import 'package:social_app/views/auth/phone_verification_screen.dart';
+import 'package:social_app/views/auth/register_details_screen.dart';
+import 'package:social_app/views/auth/register_phone_screen.dart';
 import 'package:social_app/views/auth/register_screen.dart';
 import 'package:social_app/views/chats/chats_screen.dart';
 import 'package:social_app/views/feeds/feed_screen.dart';
@@ -29,18 +32,28 @@ GoRouter buildRouter({required String initialLocation}) {
         builder: (context, state) => const RegisterScreen(),
       ),
       GoRoute(
+        path: AppRoutes.registerPhone,
+        builder: (context, state) =>
+            RegisterPhoneScreen(draft: state.extra as RegistrationDraft),
+      ),
+      GoRoute(
+        path: AppRoutes.registerDetails,
+        builder: (context, state) =>
+            RegisterDetailsScreen(draft: state.extra as RegistrationDraft),
+      ),
+      GoRoute(
         path: AppRoutes.forgotPassword,
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
       GoRoute(
         path: AppRoutes.phoneVerification,
         builder: (context, state) =>
-            PhoneVerificationScreen(phoneNumber: state.extra as String? ?? ''),
+            PhoneVerificationScreen(draft: state.extra as RegistrationDraft),
       ),
       GoRoute(
         path: AppRoutes.emailVerification,
         builder: (context, state) =>
-            EmailVerificationScreen(email: state.extra as String? ?? ''),
+            EmailVerificationScreen(draft: state.extra as RegistrationDraft),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
