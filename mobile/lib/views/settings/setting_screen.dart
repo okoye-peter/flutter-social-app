@@ -3,54 +3,56 @@ import 'dart:typed_data';
 import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:social_app/core/di/service_locator.dart';
+import 'package:social_app/core/helpers/app_toast.dart';
+import 'package:social_app/core/storage/user_cache.dart';
 import 'package:social_app/core/utils/validators.dart';
 import 'package:social_app/core/widgets/auth_submit_button.dart';
 import 'package:social_app/core/widgets/auth_text_field.dart';
 import 'package:social_app/models/user_model.dart';
+import 'package:social_app/viewmodels/users/user_bloc.dart';
 
 const _brandColor = Color(0xFF0793F1);
 
-class SettingScreen extends StatefulWidget {
+class SettingScreen extends StatelessWidget {
   const SettingScreen({super.key});
 
   @override
-  State<SettingScreen> createState() => _SettingScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider<UserBloc>(
+      create: (_) => UserBloc(),
+      child: const _SettingScreenBody(),
+    );
+  }
 }
 
-class _SettingScreenState extends State<SettingScreen> {
+class _SettingScreenBody extends StatefulWidget {
+  const _SettingScreenBody();
+
+  @override
+  State<_SettingScreenBody> createState() => _SettingScreenBodyState();
+}
+
+class _SettingScreenBodyState extends State<_SettingScreenBody> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _aboutController = TextEditingController();
   final _imagePicker = ImagePicker();
 
-  final _user = UserModel(
-    id: '1',
-    name: 'Alex Morgan',
-    username: 'alexmorgan',
-    phoneNumber: '+2348012345678',
-    image: '',
-    email: '',
-    fcmToken: '',
-    aboutMe: 'Living my best life.',
-    lastSeen: '',
-    createdAt: '',
-    isOnline: true,
-    friendsIds: const [],
-    friendRequestsIds: const [],
-    sentFriendRequestsIds: const [],
-  );
+  late UserModel _user;
 
   Uint8List? _avatarBytes;
   bool _isUploadingAvatar = false;
   bool _isEditing = false;
-  bool _isSaving = false;
   bool isDarkTheme = false;
 
   @override
   void initState() {
     super.initState();
+    _user = getIt<UserCache>().current!;
     _nameController.text = _user.name;
     _aboutController.text = _user.aboutMe;
     getThemeMode();
@@ -183,24 +185,33 @@ class _SettingScreenState extends State<SettingScreen> {
     });
   }
 
-  Future<void> _onSaveProfile() async {
+  void _onSaveProfile() {
     final isFormValid = _formKey.currentState!.validate();
     if (!isFormValid) return;
     FocusScope.of(context).unfocus();
 
-    setState(() => _isSaving = true);
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
+    context.read<UserBloc>().add(
+      UpdateUserEvent(
+        user: _user.copyWith(
+          newName: _nameController.text.trim(),
+          newAboutMe: _aboutController.text.trim(),
+        ),
+      ),
+    );
+  }
 
-    setState(() {
-      _user.name = _nameController.text.trim();
-      _user.aboutMe = _aboutController.text.trim();
-      _isSaving = false;
-      _isEditing = false;
-    });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Profile updated')));
+  void _onUserStateChanged(BuildContext context, UserState state) {
+    if (state is UserErrorState) {
+      AppToast.error(state.message);
+      return;
+    }
+
+    if (state is UserUpdatedState) {
+      setState(() {
+        _isEditing = false;
+      });
+      AppToast.success('User profile update successfully');
+    }
   }
 
   ImageProvider? _avatarImage() {
@@ -214,225 +225,230 @@ class _SettingScreenState extends State<SettingScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final avatarImage = _avatarImage();
 
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-        children: [
-          Text(
-            'Settings',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 24),
-          Center(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                CircleAvatar(
-                  radius: 56,
-                  backgroundColor: colorScheme.surfaceContainerHighest,
-                  backgroundImage: avatarImage,
-                  child: avatarImage == null
-                      ? Text(
-                          _user.name.isNotEmpty
-                              ? _user.name[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        )
-                      : null,
+    return BlocConsumer<UserBloc, UserState>(
+      listener: _onUserStateChanged,
+      builder: (context, state) {
+        final isSaving = state is UserLoadingState;
+
+        return SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+            children: [
+              Text(
+                'Settings',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
                 ),
-                if (_isUploadingAvatar)
-                  Positioned.fill(
-                    child: CircleAvatar(
+              ),
+              const SizedBox(height: 24),
+              Center(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    CircleAvatar(
                       radius: 56,
-                      backgroundColor: Colors.black.withValues(alpha: 0.45),
-                      child: const CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        color: Colors.white,
-                      ),
+                      backgroundColor: colorScheme.surfaceContainerHighest,
+                      backgroundImage: avatarImage,
+                      child: avatarImage == null
+                          ? Text(
+                              _user.name.isNotEmpty
+                                  ? _user.name[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            )
+                          : null,
                     ),
-                  ),
-                Positioned(
-                  bottom: -2,
-                  right: -2,
-                  child: GestureDetector(
-                    onTap: _showAvatarOptions,
-                    child: Container(
-                      height: 34,
-                      width: 34,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _brandColor,
-                        border: Border.all(
-                          color: colorScheme.surface,
-                          width: 2.5,
+                    if (_isUploadingAvatar)
+                      Positioned.fill(
+                        child: CircleAvatar(
+                          radius: 56,
+                          backgroundColor: Colors.black.withValues(alpha: 0.45),
+                          child: const CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
-                      child: const Icon(
-                        Icons.camera_alt_rounded,
-                        size: 16,
-                        color: Colors.white,
+                    Positioned(
+                      bottom: -2,
+                      right: -2,
+                      child: GestureDetector(
+                        onTap: _showAvatarOptions,
+                        child: Container(
+                          height: 34,
+                          width: 34,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _brandColor,
+                            border: Border.all(
+                              color: colorScheme.surface,
+                              width: 2.5,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                if (_isEditing) ...[
-                  AuthTextField(
-                    controller: _nameController,
-                    label: 'Full name',
-                    icon: Icons.person_outline_rounded,
-                    textInputAction: TextInputAction.next,
-                    validator: validateName,
-                  ),
-                  const SizedBox(height: 16),
-                  AuthTextField(
-                    controller: _aboutController,
-                    label: 'About me',
-                    icon: Icons.info_outline_rounded,
-                    textInputAction: TextInputAction.done,
-                  ),
-                ] else ...[
-                  Center(
-                    child: Text(
-                      _user.name,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Center(
-                    child: Text(
-                      _user.aboutMe.isNotEmpty
-                          ? _user.aboutMe
-                          : 'No bio added yet',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.phone_outlined,
-                      size: 16,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _user.phoneNumber,
-                      style: TextStyle(color: colorScheme.onSurfaceVariant),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      Icons.verified_rounded,
-                      size: 16,
-                      color: Colors.green.shade600,
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                if (_isEditing)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 54,
-                          child: OutlinedButton(
-                            onPressed: _isSaving ? null : _onCancelEdit,
-                            style: OutlinedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: const Text('Cancel'),
-                          ),
+              ),
+              const SizedBox(height: 24),
+              Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    if (_isEditing) ...[
+                      AuthTextField(
+                        controller: _nameController,
+                        label: 'Full name',
+                        icon: Icons.person_outline_rounded,
+                        textInputAction: TextInputAction.next,
+                        validator: validateName,
+                      ),
+                      const SizedBox(height: 16),
+                      AuthTextField(
+                        controller: _aboutController,
+                        label: 'About me',
+                        icon: Icons.info_outline_rounded,
+                        textInputAction: TextInputAction.done,
+                      ),
+                    ] else ...[
+                      Center(
+                        child: Text(
+                          _user.name,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: AuthSubmitButton(
-                          label: 'Save',
-                          isLoading: _isSaving,
-                          onPressed: _onSaveProfile,
+                      const SizedBox(height: 6),
+                      Center(
+                        child: Text(
+                          _user.aboutMe.isNotEmpty
+                              ? _user.aboutMe
+                              : 'No bio added yet',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
                       ),
                     ],
-                  )
-                else
-                  SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: OutlinedButton.icon(
-                      onPressed: _onEditProfile,
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Edit profile'),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.phone_outlined,
+                          size: 16,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _user.phoneNumber,
+                          style: TextStyle(color: colorScheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          Icons.verified_rounded,
+                          size: 16,
+                          color: Colors.green.shade600,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    if (_isEditing)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 54,
+                              child: OutlinedButton(
+                                onPressed: isSaving ? null : _onCancelEdit,
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child: const Text('Cancel'),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: AuthSubmitButton(
+                              label: 'Save',
+                              isLoading: isSaving,
+                              onPressed: _onSaveProfile,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      SizedBox(
+                        width: double.infinity,
+                        height: 54,
+                        child: OutlinedButton.icon(
+                          onPressed: _onEditProfile,
+                          icon: const Icon(Icons.edit_outlined, size: 18),
+                          label: const Text('Edit profile'),
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-          Text(
-            'Preferences',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: SwitchListTile(
-              title: const Text('Change Theme'),
-              secondary: Container(
-                height: 30,
-                width: 30,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isDarkTheme ? Colors.white : Colors.black,
-                ),
-                child: Icon(
-                  isDarkTheme
-                      ? Icons.nightlight_rounded
-                      : Icons.wb_sunny_rounded,
-                  color: isDarkTheme ? Colors.black : Colors.white,
+                  ],
                 ),
               ),
-              value: isDarkTheme,
-              onChanged: (bool value) {
-                setState(() {
-                  isDarkTheme = value;
-                });
-                if (value) {
-                  AdaptiveTheme.of(context).setDark();
-                } else {
-                  AdaptiveTheme.of(context).setLight();
-                }
-              },
-            ),
+              const SizedBox(height: 32),
+              Text(
+                'Preferences',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                child: SwitchListTile(
+                  title: const Text('Change Theme'),
+                  secondary: Container(
+                    height: 30,
+                    width: 30,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isDarkTheme ? Colors.white : Colors.black,
+                    ),
+                    child: Icon(
+                      isDarkTheme
+                          ? Icons.nightlight_rounded
+                          : Icons.wb_sunny_rounded,
+                      color: isDarkTheme ? Colors.black : Colors.white,
+                    ),
+                  ),
+                  value: isDarkTheme,
+                  onChanged: (bool value) {
+                    setState(() {
+                      isDarkTheme = value;
+                    });
+                    if (value) {
+                      AdaptiveTheme.of(context).setDark();
+                    } else {
+                      AdaptiveTheme.of(context).setLight();
+                    }
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

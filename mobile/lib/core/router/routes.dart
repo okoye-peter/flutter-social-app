@@ -1,7 +1,9 @@
 import 'package:go_router/go_router.dart';
 import 'package:social_app/core/router/app_routes.dart';
+import 'package:social_app/core/router/go_router_refresh_stream.dart';
 import 'package:social_app/core/widgets/home_screen.dart';
 import 'package:social_app/models/registration_draft.dart';
+import 'package:social_app/viewmodels/auth/auth_bloc.dart';
 import 'package:social_app/views/auth/email_veritication_screen.dart';
 import 'package:social_app/views/auth/forgot_password_screen.dart';
 import 'package:social_app/views/auth/login_screen.dart';
@@ -15,9 +17,36 @@ import 'package:social_app/views/groups/groups_screen.dart';
 import 'package:social_app/views/onboarding/onboarding_screen.dart';
 import 'package:social_app/views/settings/setting_screen.dart';
 
-GoRouter buildRouter({required String initialLocation}) {
+GoRouter buildRouter({required AuthBloc authBloc,
+  required bool hasSeenOnboarding
+}) {
+  const authFlowRoutes = {
+    AppRoutes.login,
+    AppRoutes.register,
+    AppRoutes.registerPhone,
+    AppRoutes.registerDetails,
+    AppRoutes.forgotPassword,
+    AppRoutes.phoneVerification,
+    AppRoutes.emailVerification,
+  };
+
   return GoRouter(
-    initialLocation: initialLocation,
+    initialLocation: AppRoutes.onboarding,
+    refreshListenable: GoRouterRefreshStream(authBloc.stream),
+    redirect: (context, state) {
+      final loc = state.matchedLocation;
+      final loggedIn = authBloc.state is AuthLoadedState;
+
+      if (loc == AppRoutes.onboarding) {
+        if (!hasSeenOnboarding) return null;
+        return loggedIn ? AppRoutes.feeds : AppRoutes.login;
+      }
+
+      final isAuthFlow = authFlowRoutes.contains(loc);
+      if (!loggedIn && !isAuthFlow) return AppRoutes.login;
+      if (loggedIn && isAuthFlow) return AppRoutes.feeds;
+      return null;
+    },
     routes: [
       GoRoute(
         path: AppRoutes.onboarding,

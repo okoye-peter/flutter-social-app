@@ -1,5 +1,7 @@
 // ignore_for_file: public_member_api_docs, sort_constructors_first
-class UserModel {
+import 'package:equatable/equatable.dart';
+
+class UserModel extends Equatable {
   String id;
   String name;
   String username;
@@ -71,4 +73,56 @@ class UserModel {
       'sentFriendRequestsIds': sentFriendRequestsIds,
     };
   }
+
+  UserModel copyWith({
+    String? newId,
+    String? newName,
+    String? newUsername,
+    String? newEmail,
+    String? newPhoneNumber,
+    String? newImage,
+    String? newFcmToken,
+    String? newAboutMe,
+    String? newLastSeen,
+    String? newCreatedAt,
+    bool? newIsOnline,
+    List<String>? newFriendsIds,
+    List<String>? newFriendRequestsIds,
+    List<String>? newSentFriendRequestsIds,
+  }) {
+    return UserModel(
+      id: newId ?? id,
+      name: newName ?? name,
+      username: newUsername ?? username,
+      email: newEmail?? email,
+      phoneNumber: newPhoneNumber ?? phoneNumber,
+      image: newImage ?? image,
+      fcmToken: newFcmToken ?? fcmToken,
+      aboutMe: newAboutMe ?? aboutMe,
+      lastSeen: newLastSeen ?? lastSeen,
+      createdAt: newCreatedAt ?? createdAt,
+      isOnline: newIsOnline ?? isOnline,
+      friendsIds: newFriendsIds ?? friendsIds,
+      friendRequestsIds: newFriendRequestsIds ?? friendRequestsIds,
+      sentFriendRequestsIds: newSentFriendRequestsIds ?? sentFriendRequestsIds,
+    );
+  }
+
+  @override
+  List<Object> get props => [
+    id,
+    name,
+    username,
+    email,
+    phoneNumber,
+    image,
+    fcmToken,
+    aboutMe,
+    lastSeen,
+    createdAt,
+    isOnline,
+    friendsIds,
+    friendRequestsIds,
+    sentFriendRequestsIds,
+  ];
 }
