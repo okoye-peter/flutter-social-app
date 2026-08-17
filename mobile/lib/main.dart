@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:social_app/core/di/service_locator.dart';
-import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/router/routes.dart';
 import 'package:social_app/core/storage/token_storage.dart';
 import 'package:social_app/firebase_options.dart';
