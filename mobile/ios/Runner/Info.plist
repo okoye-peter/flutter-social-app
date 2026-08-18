@@ -75,8 +75,8 @@
 			<string>remote-notification</string>
 		</array>
 		<key>NSCameraUsageDescription</key>
-		<string>Used to take a new photo for your profile picture.</string>
+		<string>This app needs permission to access your camera.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>Used to choose a photo for your profile picture.</string>
+		<string>This app needs permission to access your gallery.</string>
 	</dict>
 </plist>

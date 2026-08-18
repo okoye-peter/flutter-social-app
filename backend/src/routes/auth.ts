@@ -12,7 +12,6 @@ authRouter.post('/refresh', authController.refresh);
 authRouter.post('/logout', authController.logout);
 authRouter.post('/forgot-password', authController.forgotPassword);
 authRouter.post('/reset-password', authController.resetPassword);
-authRouter.put('/profile', requireAuth, uploadProfileImage.single('image'), authController.updateProfile);
 
 authRouter.post('/otp/email/send', authController.sendEmailOtp);
 authRouter.post('/otp/email/verify', authController.verifyEmailOtp);

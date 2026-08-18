@@ -48,13 +48,7 @@ export interface LoginInput {
   password?: string;
 }
 
-export interface UpdateProfileInput {
-  name?: string;
-  aboutMe?: string;
-  imageFile?: { buffer: Buffer };
-}
-
-function toSafeUser(user: User): SafeUser {
+export function toSafeUser(user: User): SafeUser {
   const { password: _password, ...safeUser } = user;
   return safeUser;
 }
@@ -244,24 +238,4 @@ export async function resetPassword(token: string | undefined, newPassword: stri
       data: { usedAt: new Date() },
     }),
   ]);
-}
-
-export async function updateProfile(userId: string, input: UpdateProfileInput): Promise<SafeUser> {
-  const { name, aboutMe, imageFile } = input;
-  if (name !== undefined && !isValidName(name)) {
-    throw new HttpError(400, 'Name is too short');
-  }
-
-  const image = imageFile ? await uploadImage(imageFile.buffer, 'profile-images') : undefined;
-
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      ...(name !== undefined ? { name: name.trim() } : {}),
-      ...(aboutMe !== undefined ? { aboutMe: aboutMe.trim() } : {}),
-      ...(image !== undefined ? { image } : {}),
-    },
-  });
-
-  return toSafeUser(user);
 }

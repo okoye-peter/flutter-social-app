@@ -3,6 +3,7 @@ import cors from 'cors';
 import express from 'express';
 import { authRouter } from './routes/auth.js';
 import { notificationsRouter } from './routes/notifications.js';
+import { usersRouter } from './routes/users.js';
 import { errorHandler } from './middleware/error-handler.js';
 
 const app = express();
@@ -11,6 +12,7 @@ app.use(express.json());
 
 app.use('/api/auth', authRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/users', usersRouter);
 
 app.use(errorHandler);
 

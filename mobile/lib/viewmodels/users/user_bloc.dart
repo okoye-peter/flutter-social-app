@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -21,7 +23,11 @@ class UserBloc extends Bloc<UserEvent, UserState> {
   ) async {
     emit(UserLoadingState());
     try {
-      final user = await _repo.updateUser(event.user);
+      final user = await _repo.updateUser(
+        event.user,
+        imageBytes: event.imageBytes,
+        imageFileName: event.imageFileName,
+      );
       emit(UserUpdatedState(user: user));
     } catch (e) {
       final message = e is AppException ? e.message : 'User profile update failed';

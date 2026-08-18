@@ -79,13 +79,3 @@ export async function resetPassword(req: Request, res: Response) {
   await authService.resetPassword(req.body?.token, req.body?.newPassword);
   res.json({ message: 'Password updated successfully' });
 }
-
-export async function updateProfile(req: Request, res: Response) {
-  const { name, aboutMe } = req.body as { name?: string; aboutMe?: string };
-  const user = await authService.updateProfile(req.userId!, {
-    name,
-    aboutMe,
-    imageFile: req.file ? { buffer: req.file.buffer } : undefined,
-  });
-  res.json({ user });
-}
