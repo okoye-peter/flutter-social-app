@@ -3,6 +3,8 @@ import { HttpError } from '../lib/http-error.js';
 import { isValidName } from '../lib/validators.js';
 import { uploadImage } from './cloudinary.js';
 import { toSafeUser, type SafeUser } from './auth.js';
+import { isFollowing } from './follow.js';
+import { hasBlocked } from './block.js';
 
 export interface UpdateProfileInput {
   name?: string;
@@ -28,4 +30,19 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
   });
 
   return toSafeUser(user);
+}
+
+export async function getUserProfile(
+  targetUserId: string,
+  viewerId: string,
+): Promise<{ user: SafeUser; isFollowedByMe: boolean; isBlockedByMe: boolean }> {
+  const user = await prisma.user.findUnique({ where: { id: targetUserId } });
+  if (!user) throw new HttpError(404, 'User not found');
+
+  const [followedByMe, blockedByMe] = await Promise.all([
+    isFollowing(viewerId, targetUserId),
+    hasBlocked(viewerId, targetUserId),
+  ]);
+
+  return { user: toSafeUser(user), isFollowedByMe: followedByMe, isBlockedByMe: blockedByMe };
 }
