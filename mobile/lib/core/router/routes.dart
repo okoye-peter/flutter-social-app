@@ -12,7 +12,7 @@ import 'package:social_app/views/auth/register_details_screen.dart';
 import 'package:social_app/views/auth/register_phone_screen.dart';
 import 'package:social_app/views/auth/register_screen.dart';
 import 'package:social_app/views/chats/chats_screen.dart';
-import 'package:social_app/views/feeds/feed_screen.dart';
+import 'package:social_app/views/feeds/feeds_screen.dart';
 import 'package:social_app/views/groups/groups_screen.dart';
 import 'package:social_app/views/onboarding/onboarding_screen.dart';
 import 'package:social_app/views/settings/setting_screen.dart';

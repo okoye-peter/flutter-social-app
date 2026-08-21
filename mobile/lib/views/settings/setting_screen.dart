@@ -128,7 +128,7 @@ class _SettingScreenBodyState extends State<_SettingScreenBody> {
     Navigator.of(context).pop();
     setState(() {
       _avatarBytes = null;
-      _user.image = '';
+      _user = _user.copyWith(newImage: '');
     });
   }
 

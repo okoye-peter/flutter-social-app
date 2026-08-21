@@ -2,22 +2,22 @@
 import 'package:equatable/equatable.dart';
 
 class UserModel extends Equatable {
-  String id;
-  String name;
-  String username;
-  String email;
-  String phoneNumber;
-  String image;
-  String fcmToken;
-  String aboutMe;
-  String lastSeen;
-  String createdAt;
-  bool isOnline;
-  List<String> friendsIds;
-  List<String> friendRequestsIds;
-  List<String> sentFriendRequestsIds;
+  final String id;
+  final String name;
+  final String username;
+  final String email;
+  final String phoneNumber;
+  final String image;
+  final String fcmToken;
+  final String aboutMe;
+  final String lastSeen;
+  final String createdAt;
+  final bool isOnline;
+  final List<String> friendsIds;
+  final List<String> friendRequestsIds;
+  final List<String> sentFriendRequestsIds;
 
-  UserModel({
+  const UserModel({
     required this.id,
     required this.name,
     required this.username,
@@ -125,4 +125,12 @@ class UserModel extends Equatable {
     friendRequestsIds,
     sentFriendRequestsIds,
   ];
+
+  String get getInitials {
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '';
+    final first = parts[0][0];
+    final second = parts.length > 1 ? parts[1][0] : '';
+    return (first + second).toUpperCase();
+  }
 }
