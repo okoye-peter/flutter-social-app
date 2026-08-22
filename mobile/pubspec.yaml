@@ -48,7 +48,7 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   country_picker: ^2.0.28
   flutter_dotenv: ^6.0.1
-  shimmer: ^3.0.0
+  shimmer: ^4.0.0
   pinput: ^6.0.2
   image_picker: ^1.2.3
   cached_network_image: ^3.4.1
@@ -58,6 +58,9 @@ dependencies:
   flutter_secure_storage: ^11.0.0
   bloc_concurrency: ^0.3.0
   fluttertoast: ^10.0.0
+  video_player: ^2.14.0
+  just_audio: ^0.10.6
+  visibility_detector: ^0.4.0+2
 
 dev_dependencies:
   flutter_test:

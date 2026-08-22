@@ -5,17 +5,29 @@ import * as likeService from '../services/like.js';
 import * as bookmarkService from '../services/bookmark.js';
 import * as repostService from '../services/repost.js';
 import * as tagService from '../services/tag.js';
+import * as soundService from '../services/sound.js';
 
 export async function createPost(req: Request, res: Response) {
-  const { kind, caption, taggedUserIds } = req.body as { kind?: string; caption?: string; taggedUserIds?: string };
+  const { kind, caption, taggedUserIds, soundId } = req.body as {
+    kind?: string;
+    caption?: string;
+    taggedUserIds?: string;
+    soundId?: string;
+  };
   const post = await postService.createPost({
     userId: req.userId!,
     kind,
     caption,
     mediaFile: req.file ? { buffer: req.file.buffer, mimetype: req.file.mimetype } : undefined,
     taggedUserIds: taggedUserIds ? (JSON.parse(taggedUserIds) as string[]) : undefined,
+    soundId,
   });
   res.status(201).json({ post });
+}
+
+export async function getPostSound(req: Request, res: Response) {
+  const sound = await soundService.getOrCreateSoundForPost(req.params.id as string);
+  res.json({ sound });
 }
 
 export async function listFeed(req: Request, res: Response) {

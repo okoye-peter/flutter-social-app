@@ -13,6 +13,7 @@ import 'package:social_app/views/auth/register_phone_screen.dart';
 import 'package:social_app/views/auth/register_screen.dart';
 import 'package:social_app/views/chats/chats_screen.dart';
 import 'package:social_app/views/feeds/feeds_screen.dart';
+import 'package:social_app/views/feeds/view_reels.dart';
 import 'package:social_app/views/groups/groups_screen.dart';
 import 'package:social_app/views/onboarding/onboarding_screen.dart';
 import 'package:social_app/views/settings/setting_screen.dart';
@@ -85,14 +86,23 @@ GoRouter buildRouter({required AuthBloc authBloc,
             EmailVerificationScreen(draft: state.extra as RegistrationDraft),
       ),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) =>
-            HomeScaffold(navigationShell: navigationShell),
+        builder: (context, state, navigationShell) => HomeScaffold(
+          navigationShell: navigationShell,
+          currentFullPath: state.fullPath,
+        ),
         branches: [
           StatefulShellBranch(
             routes: [
               GoRoute(
                 path: AppRoutes.feeds,
                 builder: (context, state) => const FeedsScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':id',
+                    builder: (context, state) =>
+                        ViewReelDetailsScreen(reelId: state.pathParameters['id']!),
+                  ),
+                ],
               ),
             ],
           ),

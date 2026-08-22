@@ -38,6 +38,7 @@ model User {
   passwordResetTokens    PasswordResetToken[]
   refreshTokens          RefreshToken[]
   posts                  Post[]
+  sounds                 Sound[]
   reposts                Repost[]
   taggedIn               PostTag[]
   createdConversations   Conversation[]
@@ -111,6 +112,8 @@ model Post {
   caption        String    @default("")
   mediaUrl       String?   @map("media_url")
   thumbnailUrl   String?   @map("thumbnail_url")
+  soundId        String?   @map("sound_id")
+  sound          Sound?    @relation("PostUsesSound", fields: [soundId], references: [id], onDelete: SetNull)
   commentsCount  Int       @default(0) @map("comments_count")
   likesCount     Int       @default(0) @map("likes_count")
   repostsCount   Int       @default(0) @map("reposts_count")
@@ -118,16 +121,39 @@ model Post {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  reposts       Repost[]
-  tags          PostTag[]
-  comments      Comment[]
-  likes         PostLike[]
-  bookmarks     Bookmark[]
-  notifications Notification[]
-  reports       Report[]
+  reposts        Repost[]
+  tags           PostTag[]
+  comments       Comment[]
+  likes          PostLike[]
+  bookmarks      Bookmark[]
+  notifications  Notification[]
+  reports        Report[]
+  extractedSound Sound?          @relation("SoundSource")
 
   @@index([userId, kind, createdAt])
+  @@index([soundId])
   @@map("posts")
+}
+
+/// A reusable audio track extracted from a video post's own audio, in
+/// the style of TikTok "original audio" — attachable to other people's
+/// image or text posts as background sound. Video posts always play
+/// their own embedded audio and don't reference a Sound themselves.
+model Sound {
+  id           String   @id @default(cuid())
+  sourcePostId String   @unique @map("source_post_id")
+  sourcePost   Post     @relation("SoundSource", fields: [sourcePostId], references: [id], onDelete: Cascade)
+  creatorId    String   @map("creator_id")
+  creator      User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  title        String
+  audioUrl     String   @map("audio_url")
+  usageCount   Int      @default(0) @map("usage_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  usedInPosts Post[] @relation("PostUsesSound")
+
+  @@index([creatorId])
+  @@map("sounds")
 }
 
 model Repost {

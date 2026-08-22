@@ -14,6 +14,7 @@ export interface CreatePostInput {
   caption?: string;
   mediaFile?: { buffer: Buffer; mimetype: string };
   taggedUserIds?: string[];
+  soundId?: string;
 }
 
 export type PostWithViewerState = Post & {
@@ -47,7 +48,7 @@ function deriveMediaType(mimetype: string): MediaType {
 }
 
 export async function createPost(input: CreatePostInput): Promise<Post> {
-  const { userId, caption, mediaFile, taggedUserIds } = input;
+  const { userId, caption, mediaFile, taggedUserIds, soundId } = input;
   const kind = (input.kind ?? 'POST').toUpperCase();
   if (kind !== 'POST' && kind !== 'REEL') {
     throw new HttpError(400, "kind must be 'POST' or 'REEL'");
@@ -68,11 +69,20 @@ export async function createPost(input: CreatePostInput): Promise<Post> {
     mediaUrl = await uploadAttachment(mediaFile.buffer, 'post-media');
   }
 
+  if (soundId) {
+    if (mediaType === 'VIDEO') {
+      throw new HttpError(400, 'Video posts use their own audio and cannot attach a sound');
+    }
+    const sound = await prisma.sound.findUnique({ where: { id: soundId }, select: { id: true } });
+    if (!sound) throw new HttpError(404, 'Sound not found');
+  }
+
   const [post] = await prisma.$transaction([
     prisma.post.create({
-      data: { userId, kind: kind as PostKind, mediaType, caption: trimmedCaption, mediaUrl },
+      data: { userId, kind: kind as PostKind, mediaType, caption: trimmedCaption, mediaUrl, soundId },
     }),
     prisma.user.update({ where: { id: userId }, data: { postsCount: { increment: 1 } } }),
+    ...(soundId ? [prisma.sound.update({ where: { id: soundId }, data: { usageCount: { increment: 1 } } })] : []),
   ]);
 
   if (taggedUserIds && taggedUserIds.length > 0) {

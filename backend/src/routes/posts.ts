@@ -14,6 +14,8 @@ postsRouter.get('/bookmarks', requireAuth, postController.listMyBookmarks);
 postsRouter.get('/:id', requireAuth, postController.getPost);
 postsRouter.delete('/:id', requireAuth, postController.deletePost);
 
+postsRouter.get('/:id/sound', requireAuth, postController.getPostSound);
+
 postsRouter.get('/:id/comments', requireAuth, postController.listComments);
 postsRouter.post('/:id/comments', requireAuth, postController.createComment);
 

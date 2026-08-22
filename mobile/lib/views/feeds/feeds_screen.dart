@@ -1,12 +1,21 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:social_app/core/di/service_locator.dart';
+import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/storage/user_cache.dart';
 import 'package:social_app/models/user_model.dart';
+import 'package:social_app/views/feeds/widgets/reels_tile.dart';
+import 'package:social_app/views/feeds/widgets/story_tile.dart';
 
-const _storyItemExtent = 60.0;
-const _storyDefaultBorderColor = Color.fromARGB(255, 18, 48, 131);
+// TODO: temporary sample used to test reels video playback — replace
+// with a real Post.mediaUrl once the feed is wired to the backend.
+const _sampleReelVideoUrl =
+    'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4';
+
+const _storyItemWidth = 80.0;
+const _storyRowHeight = 120.0;
+const _reelCardHeight = 800.0;
 
 class FeedsScreen extends StatelessWidget {
   const FeedsScreen({super.key});
@@ -15,24 +24,30 @@ class FeedsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final UserModel? user = getIt<UserCache>().current;
+    final isDarkMode = theme.brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
         leading: IconButton(
+          // TODO: implement new post feature
           onPressed: () {},
           icon: Icon(Icons.add, color: theme.tabBarTheme.labelColor, size: 30),
         ),
         title: GestureDetector(
+          // TODO: implement the user search
           onTap: () {},
           child: Container(
             width: double.infinity,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.grey.withAlpha(125)),
+              //   border: isDarkMode ? Border.all(color: Color.fromARGB(122, 227, 227, 227)) : null,
+              color: isDarkMode
+                  ? theme.secondaryHeaderColor.withAlpha(125)
+                  : Color.fromARGB(122, 227, 227, 227),
             ),
             child: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 6.0, horizontal: 10),
+              padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 10),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -51,6 +66,7 @@ class FeedsScreen extends StatelessWidget {
           Stack(
             children: [
               IconButton(
+                // TODO: implement notification
                 onPressed: () {},
                 icon: Icon(
                   CupertinoIcons.bell,
@@ -79,77 +95,64 @@ class FeedsScreen extends StatelessWidget {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
-            child: SizedBox(
-              height: _storyItemExtent,
+            child: Container(
+              height: _storyRowHeight,
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: theme.dividerColor.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                itemExtent: _storyItemExtent,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemExtent: _storyItemWidth,
                 itemCount: 15,
                 itemBuilder: (_, index) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: _StoryAvatar(
-                      user: user,
-                      highlightColor: theme.highlightColor,
-                      borderColor: index == 0
-                          ? Colors.blueAccent
-                          : _storyDefaultBorderColor,
-                      showAddBadge: index == 0,
-                    ),
+                  final isOwnStory = index == 0;
+                  final hasSeen = index % 3 == 0;
+                  return StoryTile(
+                    avatarUrl: user?.image ?? '',
+                    initials: user?.getInitials ?? '?',
+                    label: isOwnStory ? 'Your story' : (user?.name ?? 'Friend'),
+                    isOwnStory: isOwnStory,
+                    hasUnseenStory: hasSeen,
+                    onTap: () {},
                   );
                 },
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StoryAvatar extends StatelessWidget {
-  const _StoryAvatar({
-    required this.user,
-    required this.highlightColor,
-    required this.borderColor,
-    required this.showAddBadge,
-  });
-
-  final UserModel? user;
-  final Color highlightColor;
-  final Color borderColor;
-  final bool showAddBadge;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(width: 3, color: borderColor),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(2),
-            child: CircleAvatar(
-              backgroundImage: user != null && user!.image.trim().isNotEmpty
-                  ? CachedNetworkImageProvider(user!.image)
-                  : null,
-              child: user == null || user!.image.trim().isEmpty
-                  ? Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: highlightColor,
-                      ),
-                      child: Text(user?.getInitials ?? '?'),
-                    )
-                  : null,
+          // reels
+          SliverFixedExtentList(
+            itemExtent: _reelCardHeight,
+            delegate: SliverChildBuilderDelegate(
+              (_, int index) {
+                // TODO: use the real post id once the feed is wired to
+                // the backend, instead of this synthesized sample id.
+                final reelId = 'sample-$index';
+                return ReelsTile(
+                  mediaUrl: _sampleReelVideoUrl,
+                  mediaType: ReelMediaType.video,
+                  mode: ReelInteractionMode.feed,
+                  avatarUrl: user?.image ?? '',
+                  username: user?.username ?? 'friend',
+                  caption: 'Testing reels video playback 🎬',
+                  soundTitle: '${user?.name ?? 'Friend'} · original audio',
+                  likeCount: 128,
+                  repostCount: 100,
+                  commentCount: 42,
+                  shareCount: 7,
+                  onTapReel: () =>
+                      context.push(AppRoutes.feedDetailsPath(reelId)),
+                );
+              },
+              childCount: 5,
             ),
           ),
-        ),
-        if (showAddBadge)
-          const Positioned(top: 10, right: 5, child: Icon(Icons.add_circle)),
-      ],
+        ],
+      ),
     );
   }
 }
