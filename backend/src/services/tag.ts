@@ -6,16 +6,9 @@ import { assertNotBlocked } from './block.js';
 import { createNotification } from './notifications.js';
 import type { PostTag, Post } from '../../generated/prisma/index.js';
 
-const MAX_TAGS_PER_POST = 20;
+export const MAX_TAGS_PER_POST = 20;
 
 export async function addTags(postId: string, ownerId: string, userIds: string[]): Promise<PostTag[]> {
-  if (!Array.isArray(userIds) || userIds.length === 0) {
-    throw new HttpError(400, 'userIds is required');
-  }
-  if (userIds.length > MAX_TAGS_PER_POST) {
-    throw new HttpError(400, `You can tag at most ${MAX_TAGS_PER_POST} people`);
-  }
-
   const post = await prisma.post.findUnique({ where: { id: postId }, select: { userId: true } });
   if (!post) throw new HttpError(404, 'Post not found');
   if (post.userId !== ownerId) throw new HttpError(403, 'Only the post owner can tag people');

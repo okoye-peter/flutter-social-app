@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:social_app/core/utils/formatters.dart';
 import 'package:social_app/views/feeds/widgets/image_background.dart';
 import 'package:social_app/views/feeds/widgets/reel_action.dart';
+import 'package:social_app/core/enums/app_enums.dart';
 import 'package:social_app/views/feeds/widgets/reel_media_shimmer.dart';
 import 'package:social_app/views/feeds/widgets/reel_text_shadow.dart';
 import 'package:social_app/views/feeds/widgets/reel_user_profile.dart';
@@ -18,15 +19,6 @@ import 'package:visibility_detector/visibility_detector.dart';
 /// resumes once it crosses back above it — the standard TikTok/Reels
 /// threshold for viewport-based autoplay.
 const _visibilityPlayThreshold = 0.6;
-
-/// Mirrors the backend `MediaType` enum (see prisma/schema.prisma).
-enum ReelMediaType { text, image, video }
-
-/// Where a [ReelsTile] is being shown — controls what tap/double-tap do,
-/// since the two contexts want different gestures for the same area:
-/// - [feed]: tap opens the reel's details page, double-tap mutes.
-/// - [details]: tap toggles play/pause, double-tap toggles like.
-enum ReelInteractionMode { feed, details }
 
 /// A single full-bleed reel — an autoplaying looped video, a static
 /// image, or a WhatsApp-style text post — with an Instagram-style right
@@ -56,18 +48,18 @@ class ReelsTile extends StatefulWidget {
     this.onTapComment,
     this.onTapShare,
   }) : assert(
-         mediaType == ReelMediaType.text || mediaUrl != null,
+         mediaType == MediaType.text || mediaUrl != null,
          'mediaUrl is required for image/video posts',
        ),
        assert(
-         soundUrl == null || mediaType != ReelMediaType.video,
+         soundUrl == null || mediaType != MediaType.video,
          'video posts play their own embedded audio; pass soundUrl only '
          'for image/text posts',
        );
 
   /// Null for text posts; required for image/video posts.
   final String? mediaUrl;
-  final ReelMediaType mediaType;
+  final MediaType mediaType;
   final ReelInteractionMode mode;
   final String avatarUrl;
   final String username;
@@ -114,7 +106,7 @@ class _ReelsTileState extends State<ReelsTile> {
   /// history correctly.
   final Key _visibilityKey = UniqueKey();
 
-  bool get _isVideo => widget.mediaType == ReelMediaType.video;
+  bool get _isVideo => widget.mediaType == MediaType.video;
 
   /// A standalone [Sound] attached to an image/text post — as opposed to
   /// a video's own embedded audio, which plays through [_controller].
@@ -225,14 +217,14 @@ class _ReelsTileState extends State<ReelsTile> {
 
   Widget _buildBackground() {
     switch (widget.mediaType) {
-      case ReelMediaType.video:
+      case MediaType.video:
         final controller = _controller;
         return controller != null
             ? VideoBackground(controller: controller)
             : const ColoredBox(color: Colors.black);
-      case ReelMediaType.image:
+      case MediaType.image:
         return ImageBackground(imageUrl: widget.mediaUrl!);
-      case ReelMediaType.text:
+      case MediaType.text:
         return TextBackground(text: widget.caption);
     }
   }
@@ -337,8 +329,8 @@ class _ReelsTileState extends State<ReelsTile> {
                     GestureDetector(
                       onTap: widget.onTapProfile,
                       child: Container(
-                        width: 28,
-                        height: 28,
+                        width: 38,
+                        height: 38,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 1.5),

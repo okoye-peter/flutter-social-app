@@ -1,10 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:social_app/core/enums/app_enums.dart';
 
 const _brandColor = Color(0xFF0793F1);
-
-enum ProfileMediaType { post, reel, repost, mention }
 
 /// Grid of media tiles shown inside one tab of the profile screen.
 /// Content is mocked locally — no backend calls are made.

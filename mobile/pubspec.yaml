@@ -38,6 +38,7 @@ dependencies:
   flutter_native_splash: ^2.4.8
   google_fonts: ^8.2.1
   dio: ^5.11.0
+  http_parser: ^4.1.2
   shared_preferences: ^2.5.5
   flutter_bloc: ^9.1.1
   equatable: ^2.1.0

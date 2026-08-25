@@ -1,8 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/router/go_router_refresh_stream.dart';
 import 'package:social_app/core/widgets/home_screen.dart';
 import 'package:social_app/models/registration_draft.dart';
+import 'package:social_app/models/story_viewer_args.dart';
 import 'package:social_app/viewmodels/auth/auth_bloc.dart';
 import 'package:social_app/views/auth/email_veritication_screen.dart';
 import 'package:social_app/views/auth/forgot_password_screen.dart';
@@ -12,13 +14,18 @@ import 'package:social_app/views/auth/register_details_screen.dart';
 import 'package:social_app/views/auth/register_phone_screen.dart';
 import 'package:social_app/views/auth/register_screen.dart';
 import 'package:social_app/views/chats/chats_screen.dart';
+import 'package:social_app/views/feeds/create_feed.dart';
+import 'package:social_app/views/feeds/create_story.dart';
 import 'package:social_app/views/feeds/feeds_screen.dart';
+import 'package:social_app/views/feeds/search_screen.dart';
+import 'package:social_app/views/feeds/story_viewer_screen.dart';
 import 'package:social_app/views/feeds/view_reels.dart';
 import 'package:social_app/views/groups/groups_screen.dart';
 import 'package:social_app/views/onboarding/onboarding_screen.dart';
 import 'package:social_app/views/settings/setting_screen.dart';
 
-GoRouter buildRouter({required AuthBloc authBloc,
+GoRouter buildRouter({
+  required AuthBloc authBloc,
   required bool hasSeenOnboarding
 }) {
   const authFlowRoutes = {
@@ -89,7 +96,7 @@ GoRouter buildRouter({required AuthBloc authBloc,
         builder: (context, state, navigationShell) => HomeScaffold(
           navigationShell: navigationShell,
           currentFullPath: state.fullPath,
-        ),
+        ),    
         branches: [
           StatefulShellBranch(
             routes: [
@@ -97,6 +104,57 @@ GoRouter buildRouter({required AuthBloc authBloc,
                 path: AppRoutes.feeds,
                 builder: (context, state) => const FeedsScreen(),
                 routes: [
+                  // Must come before ':id' below — otherwise go_router
+                  // matches 'search' as the :id param, same as Express
+                  // would (see the routes.ts comment on the backend).
+                  GoRoute(
+                    path: 'search',
+                    builder: (context, state) => const SearchScreen(),
+                  ),
+                  GoRoute(
+                    path: 'create',
+                    builder: (context, state) => const CreateFeedScreen(),
+                  ),
+                  GoRoute(
+                    path: 'create-story',
+                    builder: (context, state) => const CreateStoryScreen(),
+                  ),
+                  GoRoute(
+                    path: 'story-viewer',
+                    pageBuilder: (context, state) {
+                      final args = state.extra as StoryViewerArgs;
+                      return CustomTransitionPage<void>(
+                        key: state.pageKey,
+                        child: StoryViewerScreen(
+                          groups: args.groups,
+                          initialGroupIndex: args.initialGroupIndex,
+                          onStoryViewed: args.onStoryViewed,
+                        ),
+                        transitionDuration: const Duration(milliseconds: 220),
+                        reverseTransitionDuration: const Duration(
+                          milliseconds: 180,
+                        ),
+                        transitionsBuilder:
+                            (context, animation, secondaryAnimation, child) {
+                              final curved = CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOutCubic,
+                                reverseCurve: Curves.easeInCubic,
+                              );
+                              return FadeTransition(
+                                opacity: curved,
+                                child: ScaleTransition(
+                                  scale: Tween<double>(
+                                    begin: 0.92,
+                                    end: 1.0,
+                                  ).animate(curved),
+                                  child: child,
+                                ),
+                              );
+                            },
+                      );
+                    },
+                  ),
                   GoRoute(
                     path: ':id',
                     builder: (context, state) =>

@@ -100,21 +100,22 @@ export async function createConversation(input: CreateConversationInput): Promis
   const { creatorId, type, participantId, name, visibility, memberIds, imageFile } = input;
 
   if (type === 'DIRECT') {
-    if (!participantId) throw new HttpError(400, 'participantId is required for a direct conversation');
-    if (participantId === creatorId) throw new HttpError(400, 'Cannot start a conversation with yourself');
+    // participantId's presence for DIRECT is enforced by createConversationSchema.
+    const targetId = participantId!;
+    if (targetId === creatorId) throw new HttpError(400, 'Cannot start a conversation with yourself');
 
     const existing = await prisma.conversation.findFirst({
       where: {
         type: 'DIRECT',
         members: {
           some: { userId: creatorId, leftAt: null },
-          every: { userId: { in: [creatorId, participantId] } },
+          every: { userId: { in: [creatorId, targetId] } },
         },
       },
     });
     if (existing) return toConversationDTO(existing.id);
 
-    const target = await prisma.user.findUnique({ where: { id: participantId }, select: { id: true } });
+    const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
     if (!target) throw new HttpError(404, 'User not found');
 
     const conversation = await prisma.conversation.create({
@@ -124,23 +125,19 @@ export async function createConversation(input: CreateConversationInput): Promis
         members: {
           create: [
             { userId: creatorId, role: 'MEMBER' },
-            { userId: participantId, role: 'MEMBER' },
+            { userId: targetId, role: 'MEMBER' },
           ],
         },
       },
     });
     joinUserToConversation(creatorId, conversation.id);
-    joinUserToConversation(participantId, conversation.id);
+    joinUserToConversation(targetId, conversation.id);
     return toConversationDTO(conversation.id);
   }
 
-  if (type !== 'GROUP') {
-    throw new HttpError(400, "type must be 'DIRECT' or 'GROUP'");
-  }
-  if (!name?.trim()) {
-    throw new HttpError(400, 'name is required for a group conversation');
-  }
-  const groupVisibility: GroupVisibility = visibility === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE';
+  // name's presence for GROUP is enforced by createConversationSchema.
+  const groupName = name!;
+  const groupVisibility: GroupVisibility = (visibility ?? 'PRIVATE') as GroupVisibility;
 
   const uniqueMemberIds = [...new Set(memberIds ?? [])].filter((id) => id !== creatorId);
   if (uniqueMemberIds.length + 1 > MAX_GROUP_MEMBERS) {
@@ -157,7 +154,7 @@ export async function createConversation(input: CreateConversationInput): Promis
   const conversation = await prisma.conversation.create({
     data: {
       type: 'GROUP',
-      name: name.trim(),
+      name: groupName.trim(),
       image,
       visibility: groupVisibility,
       createdById: creatorId,
@@ -262,12 +259,6 @@ export async function updateConversation(
   await assertRole(conversationId, userId, ['OWNER', 'ADMIN']);
 
   const { name, visibility, imageFile } = input;
-  if (name !== undefined && !name.trim()) {
-    throw new HttpError(400, 'name cannot be empty');
-  }
-  if (visibility !== undefined && visibility !== 'PRIVATE' && visibility !== 'PUBLIC') {
-    throw new HttpError(400, "visibility must be 'PRIVATE' or 'PUBLIC'");
-  }
   const image = imageFile ? await uploadImage(imageFile.buffer, 'conversation-images') : undefined;
 
   await prisma.conversation.update({
@@ -285,10 +276,6 @@ export async function updateConversation(
 export async function addMembers(conversationId: string, userId: string, memberIds: string[]): Promise<ConversationDTO> {
   await assertGroup(conversationId);
   await assertRole(conversationId, userId, ['OWNER', 'ADMIN']);
-
-  if (!Array.isArray(memberIds) || memberIds.length === 0) {
-    throw new HttpError(400, 'memberIds is required');
-  }
 
   const currentCount = await prisma.conversationMember.count({ where: { conversationId, leftAt: null } });
   const uniqueIds = [...new Set(memberIds)];

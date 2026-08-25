@@ -6,7 +6,7 @@ import { uploadAttachment } from './cloudinary.js';
 import { addTags } from './tag.js';
 import type { Post, PostKind, MediaType } from '../../generated/prisma/index.js';
 
-const MAX_CAPTION_LENGTH = 2200;
+export const MAX_CAPTION_LENGTH = 2200;
 
 export interface CreatePostInput {
   userId: string;
@@ -47,20 +47,13 @@ function deriveMediaType(mimetype: string): MediaType {
   throw new HttpError(400, 'Only image or video uploads are allowed');
 }
 
+// Input-shape validation (kind, caption/media presence, caption length,
+// the video+soundId conflict) happens in createPostSchema before this
+// runs — this only handles what actually needs the DB or the write path.
 export async function createPost(input: CreatePostInput): Promise<Post> {
   const { userId, caption, mediaFile, taggedUserIds, soundId } = input;
   const kind = (input.kind ?? 'POST').toUpperCase();
-  if (kind !== 'POST' && kind !== 'REEL') {
-    throw new HttpError(400, "kind must be 'POST' or 'REEL'");
-  }
-
   const trimmedCaption = caption?.trim() ?? '';
-  if (!trimmedCaption && !mediaFile) {
-    throw new HttpError(400, 'A post needs a caption or media');
-  }
-  if (trimmedCaption.length > MAX_CAPTION_LENGTH) {
-    throw new HttpError(400, `Caption must be at most ${MAX_CAPTION_LENGTH} characters`);
-  }
 
   let mediaType: MediaType = 'TEXT';
   let mediaUrl: string | undefined;
@@ -70,9 +63,6 @@ export async function createPost(input: CreatePostInput): Promise<Post> {
   }
 
   if (soundId) {
-    if (mediaType === 'VIDEO') {
-      throw new HttpError(400, 'Video posts use their own audio and cannot attach a sound');
-    }
     const sound = await prisma.sound.findUnique({ where: { id: soundId }, select: { id: true } });
     if (!sound) throw new HttpError(404, 'Sound not found');
   }

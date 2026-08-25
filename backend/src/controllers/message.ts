@@ -9,7 +9,7 @@ export async function deleteMessage(req: Request, res: Response) {
 }
 
 export async function reactToMessage(req: Request, res: Response) {
-  const { emoji } = req.body as { emoji?: string };
+  const { emoji } = req.body as { emoji: string };
   const reaction = await reactionService.reactToMessage((req.params.id as string), req.userId!, emoji);
   res.json({ reaction });
 }

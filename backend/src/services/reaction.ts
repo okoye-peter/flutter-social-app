@@ -6,7 +6,7 @@ import { getIo } from '../realtime/io.js';
 import { conversationRoom } from '../realtime/rooms.js';
 import type { MessageReaction } from '../../generated/prisma/index.js';
 
-const MAX_EMOJI_LENGTH = 32; // generous enough for multi-codepoint ZWJ emoji sequences
+export const MAX_EMOJI_LENGTH = 32; // generous enough for multi-codepoint ZWJ emoji sequences
 
 async function getMessageOrThrow(messageId: string) {
   const message = await prisma.message.findUnique({ where: { id: messageId, deletedAt: null } });
@@ -14,10 +14,7 @@ async function getMessageOrThrow(messageId: string) {
   return message;
 }
 
-export async function reactToMessage(messageId: string, userId: string, emoji: string | undefined): Promise<MessageReaction> {
-  if (!emoji || !emoji.trim()) throw new HttpError(400, 'emoji is required');
-  if (emoji.length > MAX_EMOJI_LENGTH) throw new HttpError(400, 'emoji is too long');
-
+export async function reactToMessage(messageId: string, userId: string, emoji: string): Promise<MessageReaction> {
   const message = await getMessageOrThrow(messageId);
   await assertMembership(message.conversationId, userId);
 

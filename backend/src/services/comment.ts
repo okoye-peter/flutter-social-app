@@ -6,25 +6,14 @@ import { assertNotBlocked } from './block.js';
 import { createNotification } from './notifications.js';
 import type { Comment } from '../../generated/prisma/index.js';
 
-const MAX_COMMENT_LENGTH = 2000;
-
-function assertValidContent(content: string | undefined): asserts content is string {
-  if (!content || !content.trim()) {
-    throw new HttpError(400, 'content is required');
-  }
-  if (content.length > MAX_COMMENT_LENGTH) {
-    throw new HttpError(400, `Comment must be at most ${MAX_COMMENT_LENGTH} characters`);
-  }
-}
+export const MAX_COMMENT_LENGTH = 2000;
 
 export async function createComment(
   postId: string,
   userId: string,
-  content: string | undefined,
+  content: string,
   replyToId: string | undefined,
 ): Promise<Comment> {
-  assertValidContent(content);
-
   const post = await prisma.post.findUnique({ where: { id: postId }, select: { userId: true } });
   if (!post) throw new HttpError(404, 'Post not found');
   await assertNotBlocked(post.userId, userId);
@@ -58,9 +47,7 @@ export async function getComment(commentId: string): Promise<Comment> {
   return comment;
 }
 
-export async function updateComment(commentId: string, userId: string, content: string | undefined): Promise<Comment> {
-  assertValidContent(content);
-
+export async function updateComment(commentId: string, userId: string, content: string): Promise<Comment> {
   const comment = await prisma.comment.findUnique({ where: { id: commentId, deletedAt: null } });
   if (!comment) throw new HttpError(404, 'Comment not found');
   if (comment.userId !== userId) throw new HttpError(403, 'Only the comment author can edit it');

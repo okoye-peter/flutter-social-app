@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-
-enum _ToastKind { success, error, warning, info }
+import 'package:social_app/core/enums/app_enums.dart';
 
 /// Themed [Fluttertoast] wrapper — red/white for errors, green for success,
 /// amber/black for warnings, and a neutral dark toast for everything else.
 class AppToast {
   AppToast._();
 
-  static void success(String message) => _show(message, _ToastKind.success);
+  static void success(String message) => _show(message, ToastKind.success);
 
-  static void error(String message) => _show(message, _ToastKind.error);
+  static void error(String message) => _show(message, ToastKind.error);
 
-  static void warning(String message) => _show(message, _ToastKind.warning);
+  static void warning(String message) => _show(message, ToastKind.warning);
 
-  static void show(String message) => _show(message, _ToastKind.info);
+  static void show(String message) => _show(message, ToastKind.info);
 
-  static void _show(String message, _ToastKind kind) {
+  static void _show(String message, ToastKind kind) {
     final style = _styleFor(kind);
 
     Fluttertoast.showToast(
@@ -29,24 +28,24 @@ class AppToast {
     );
   }
 
-  static _ToastStyle _styleFor(_ToastKind kind) {
+  static _ToastStyle _styleFor(ToastKind kind) {
     switch (kind) {
-      case _ToastKind.success:
+      case ToastKind.success:
         return const _ToastStyle(
           background: Color(0xFF2E7D32),
           foreground: Colors.white,
         );
-      case _ToastKind.error:
+      case ToastKind.error:
         return const _ToastStyle(
           background: Color(0xFFD32F2F),
           foreground: Colors.white,
         );
-      case _ToastKind.warning:
+      case ToastKind.warning:
         return const _ToastStyle(
           background: Color(0xFFFFA000),
           foreground: Colors.black87,
         );
-      case _ToastKind.info:
+      case ToastKind.info:
         return const _ToastStyle(
           background: Color(0xFF323232),
           foreground: Colors.white,

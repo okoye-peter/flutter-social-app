@@ -13,7 +13,7 @@ export async function createConversation(req: Request, res: Response) {
     participantId?: string;
     name?: string;
     visibility?: string;
-    memberIds?: string;
+    memberIds?: string[];
   };
   const conversation = await conversationService.createConversation({
     creatorId: req.userId!,
@@ -21,7 +21,7 @@ export async function createConversation(req: Request, res: Response) {
     participantId,
     name,
     visibility,
-    memberIds: memberIds ? (JSON.parse(memberIds) as string[]) : undefined,
+    memberIds,
     imageFile: req.file ? { buffer: req.file.buffer } : undefined,
   });
   res.status(201).json({ conversation });
@@ -48,8 +48,8 @@ export async function updateConversation(req: Request, res: Response) {
 }
 
 export async function addMembers(req: Request, res: Response) {
-  const { memberIds } = req.body as { memberIds?: string[] };
-  const conversation = await conversationService.addMembers((req.params.id as string), req.userId!, memberIds ?? []);
+  const { memberIds } = req.body as { memberIds: string[] };
+  const conversation = await conversationService.addMembers((req.params.id as string), req.userId!, memberIds);
   res.json({ conversation });
 }
 
@@ -70,10 +70,10 @@ export async function listMessages(req: Request, res: Response) {
 
 export async function sendMessage(req: Request, res: Response) {
   const { type, content, replyToId, mentionedUserIds, durationSeconds } = req.body as {
-    type?: string;
+    type: string;
     content?: string;
     replyToId?: string;
-    mentionedUserIds?: string;
+    mentionedUserIds?: string[];
     durationSeconds?: string;
   };
   const message = await messageService.sendMessage({
@@ -83,14 +83,14 @@ export async function sendMessage(req: Request, res: Response) {
     content,
     replyToId,
     durationSeconds,
-    mentionedUserIds: mentionedUserIds ? (JSON.parse(mentionedUserIds) as string[]) : undefined,
+    mentionedUserIds,
     file: req.file ? { buffer: req.file.buffer, mimetype: req.file.mimetype, size: req.file.size, originalname: req.file.originalname } : undefined,
   });
   res.status(201).json({ message });
 }
 
 export async function markRead(req: Request, res: Response) {
-  const { upToMessageId } = req.body as { upToMessageId?: string };
+  const { upToMessageId } = req.body as { upToMessageId: string };
   const result = await messageReadService.markMessagesRead((req.params.id as string), req.userId!, upToMessageId);
   res.json(result);
 }

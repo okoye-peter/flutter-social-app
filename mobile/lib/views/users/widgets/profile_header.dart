@@ -1,5 +1,5 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:social_app/core/widgets/user_avatar.dart';
 
 const _brandColor = Color(0xFF0793F1);
 
@@ -152,15 +152,13 @@ class _Avatar extends StatelessWidget {
       child: CircleAvatar(
         radius: 38,
         backgroundColor: colorScheme.surface,
-        child: CircleAvatar(
+        child: UserAvatar(
+          source: avatarUrl.trim().isNotEmpty
+              ? avatarUrl
+              : (name.isNotEmpty ? name[0].toUpperCase() : '?'),
           radius: 35,
           backgroundColor: colorScheme.surfaceContainerHighest,
-          backgroundImage: CachedNetworkImageProvider(avatarUrl),
-          onBackgroundImageError: (_, _) {},
-          child: Text(
-            name.isNotEmpty ? name[0].toUpperCase() : '?',
-            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
-          ),
+          textColor: colorScheme.onSurface,
         ),
       ),
     );

@@ -1,6 +1,5 @@
 import { prisma } from '../prisma.js';
 import { HttpError } from '../lib/http-error.js';
-import { isValidName } from '../lib/validators.js';
 import { uploadImage } from './cloudinary.js';
 import { toSafeUser, type SafeUser } from './auth.js';
 import { isFollowing } from './follow.js';
@@ -14,10 +13,6 @@ export interface UpdateProfileInput {
 
 export async function updateProfile(userId: string, input: UpdateProfileInput): Promise<SafeUser> {
   const { name, aboutMe, imageFile } = input;
-  if (name !== undefined && !isValidName(name)) {
-    throw new HttpError(400, 'Name is too short');
-  }
-
   const image = imageFile ? await uploadImage(imageFile.buffer, 'profile-images') : undefined;
 
   const user = await prisma.user.update({

@@ -1,12 +1,12 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:social_app/core/router/app_routes.dart';
+import 'package:social_app/core/widgets/user_avatar.dart';
+import 'package:social_app/core/enums/app_enums.dart';
 import 'package:social_app/views/feeds/widgets/reel_text_shadow.dart';
-import 'package:social_app/views/feeds/widgets/reels_tile.dart';
 
-/// Bottom-left overlay on a [ReelsTile] — profile row (avatar, username,
+/// Bottom-left overlay on a `ReelsTile` — profile row (avatar, username,
 /// follow button), caption, and attached-sound label.
 class ReelUserProfile extends StatelessWidget {
   const ReelUserProfile({
@@ -24,7 +24,7 @@ class ReelUserProfile extends StatelessWidget {
   final String avatarUrl;
   final String username;
   final bool isFollowing;
-  final ReelMediaType mediaType;
+  final MediaType mediaType;
   final String caption;
   final String? soundTitle;
   final VoidCallback? onTapProfile;
@@ -43,17 +43,17 @@ class ReelUserProfile extends StatelessWidget {
             children: [
               GestureDetector(
                 onTap: onTapProfile,
-                child: CircleAvatar(
-                  radius: 16,
-                  backgroundColor: Colors.white24,
-                  backgroundImage: avatarUrl.trim().isNotEmpty
-                      ? CachedNetworkImageProvider(avatarUrl)
-                      : null,
+                child: UserAvatar(
+                  source: avatarUrl.trim().isNotEmpty
+                      ? avatarUrl
+                      : (username.isNotEmpty ? username[0].toUpperCase() : '?'),
+                  radius: 24,
                 ),
               ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: GestureDetector(
+              const SizedBox(width: 6),
+              // Expanded(
+              //   child: 
+                GestureDetector(
                   onTap: onTapProfile,
                   child: Text(
                     username,
@@ -67,7 +67,7 @@ class ReelUserProfile extends StatelessWidget {
                     ),
                   ),
                 ),
-              ),
+              // ),
               const SizedBox(width: 4),
               if (!isFollowing)
                 OutlinedButton(
@@ -88,7 +88,7 @@ class ReelUserProfile extends StatelessWidget {
                 ),
             ],
           ),
-          if (mediaType != ReelMediaType.text && caption.trim().isNotEmpty) ...[
+          if (mediaType != MediaType.text && caption.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               caption,

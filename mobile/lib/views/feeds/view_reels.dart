@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:social_app/core/di/service_locator.dart';
 import 'package:social_app/core/storage/user_cache.dart';
 import 'package:social_app/models/user_model.dart';
+import 'package:social_app/core/enums/app_enums.dart';
 import 'package:social_app/views/feeds/widgets/reels_tile.dart';
 
 // TODO: temporary sample used to test reels video playback — replace
@@ -36,7 +37,7 @@ class _ViewReelDetailsScreenState extends State<ViewReelDetailsScreen> {
               width: MediaQuery.of(context).size.width,
               child: ReelsTile(
                 mediaUrl: _sampleReelVideoUrl,
-                mediaType: ReelMediaType.video,
+                mediaType: MediaType.video,
                 mode: ReelInteractionMode.details,
                 avatarUrl: user?.image ?? '',
                 username: user?.username ?? 'friend',

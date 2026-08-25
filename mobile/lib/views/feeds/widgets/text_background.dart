@@ -11,17 +11,22 @@ const _backgroundColors = [
 ];
 
 /// Full-bleed colored background for a text-only post, in the style of a
-/// WhatsApp text status. The color is picked deterministically from the
-/// text itself so the same post always renders the same color.
+/// WhatsApp text status. The color is picked deterministically from
+/// [colorSeed] (the caption, by default) so the same post always renders
+/// the same color. Pass a [colorSeed] that doesn't change with [text] —
+/// e.g. while composing — to keep the color stable as the caption is
+/// edited.
 class TextBackground extends StatelessWidget {
-  const TextBackground({super.key, required this.text});
+  const TextBackground({super.key, required this.text, String? colorSeed})
+    : colorSeed = colorSeed ?? text;
 
   final String text;
+  final String colorSeed;
 
   @override
   Widget build(BuildContext context) {
     final color =
-        _backgroundColors[text.hashCode.abs() % _backgroundColors.length];
+        _backgroundColors[colorSeed.hashCode.abs() % _backgroundColors.length];
 
     return Container(
       color: color,

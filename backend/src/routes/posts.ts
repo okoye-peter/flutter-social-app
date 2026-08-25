@@ -2,10 +2,19 @@ import { Router } from 'express';
 import * as postController from '../controllers/post.js';
 import { requireAuth } from '../middleware/auth.js';
 import { uploadPostMedia } from '../middleware/upload.js';
+import { validate } from '../middleware/validate.js';
+import { createCommentSchema } from '../schemas/comment.schema.js';
+import { addTagsSchema, checkCreatePostFile, createPostSchema, repostSchema } from '../schemas/post.schema.js';
 
 export const postsRouter = Router();
 
-postsRouter.post('/', requireAuth, uploadPostMedia.single('media'), postController.createPost);
+postsRouter.post(
+  '/',
+  requireAuth,
+  uploadPostMedia.single('media'),
+  validate(createPostSchema, { withFile: checkCreatePostFile }),
+  postController.createPost,
+);
 postsRouter.get('/', requireAuth, postController.listFeed);
 
 // Must be registered before '/:id' — otherwise Express matches 'bookmarks' as the :id param.
@@ -17,7 +26,7 @@ postsRouter.delete('/:id', requireAuth, postController.deletePost);
 postsRouter.get('/:id/sound', requireAuth, postController.getPostSound);
 
 postsRouter.get('/:id/comments', requireAuth, postController.listComments);
-postsRouter.post('/:id/comments', requireAuth, postController.createComment);
+postsRouter.post('/:id/comments', requireAuth, validate(createCommentSchema), postController.createComment);
 
 postsRouter.post('/:id/likes', requireAuth, postController.likePost);
 postsRouter.delete('/:id/likes', requireAuth, postController.unlikePost);
@@ -25,8 +34,8 @@ postsRouter.delete('/:id/likes', requireAuth, postController.unlikePost);
 postsRouter.post('/:id/bookmarks', requireAuth, postController.bookmarkPost);
 postsRouter.delete('/:id/bookmarks', requireAuth, postController.unbookmarkPost);
 
-postsRouter.post('/:id/reposts', requireAuth, postController.repost);
+postsRouter.post('/:id/reposts', requireAuth, validate(repostSchema), postController.repost);
 postsRouter.delete('/:id/reposts', requireAuth, postController.unrepost);
 
-postsRouter.post('/:id/tags', requireAuth, postController.addTags);
+postsRouter.post('/:id/tags', requireAuth, validate(addTagsSchema), postController.addTags);
 postsRouter.delete('/:id/tags/:userId', requireAuth, postController.removeTag);

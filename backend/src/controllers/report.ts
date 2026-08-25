@@ -3,7 +3,7 @@ import * as reportService from '../services/report.js';
 
 export async function createReport(req: Request, res: Response) {
   const { reason, details, postId, commentId, reportedUserId } = req.body as {
-    reason?: string;
+    reason: string;
     details?: string;
     postId?: string;
     commentId?: string;

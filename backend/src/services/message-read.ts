@@ -7,10 +7,9 @@ import { conversationRoom } from '../realtime/rooms.js';
 export async function markMessagesRead(
   conversationId: string,
   userId: string,
-  upToMessageId: string | undefined,
+  upToMessageId: string,
 ): Promise<{ count: number }> {
   await assertMembership(conversationId, userId);
-  if (!upToMessageId) throw new HttpError(400, 'upToMessageId is required');
 
   const target = await prisma.message.findUnique({
     where: { id: upToMessageId, conversationId },

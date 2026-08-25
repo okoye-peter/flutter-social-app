@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:social_app/core/enums/app_enums.dart';
 import 'package:social_app/views/users/widgets/profile_header.dart';
 import 'package:social_app/views/users/widgets/profile_media_grid.dart';
 

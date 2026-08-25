@@ -11,7 +11,7 @@ export async function createPost(req: Request, res: Response) {
   const { kind, caption, taggedUserIds, soundId } = req.body as {
     kind?: string;
     caption?: string;
-    taggedUserIds?: string;
+    taggedUserIds?: string[];
     soundId?: string;
   };
   const post = await postService.createPost({
@@ -19,7 +19,7 @@ export async function createPost(req: Request, res: Response) {
     kind,
     caption,
     mediaFile: req.file ? { buffer: req.file.buffer, mimetype: req.file.mimetype } : undefined,
-    taggedUserIds: taggedUserIds ? (JSON.parse(taggedUserIds) as string[]) : undefined,
+    taggedUserIds,
     soundId,
   });
   res.status(201).json({ post });
@@ -53,7 +53,7 @@ export async function listComments(req: Request, res: Response) {
 }
 
 export async function createComment(req: Request, res: Response) {
-  const { content, replyToId } = req.body as { content?: string; replyToId?: string };
+  const { content, replyToId } = req.body as { content: string; replyToId?: string };
   const comment = await commentService.createComment((req.params.id as string), req.userId!, content, replyToId);
   res.status(201).json({ comment });
 }
@@ -96,8 +96,8 @@ export async function unrepost(req: Request, res: Response) {
 }
 
 export async function addTags(req: Request, res: Response) {
-  const { userIds } = req.body as { userIds?: string[] };
-  const tags = await tagService.addTags((req.params.id as string), req.userId!, userIds ?? []);
+  const { userIds } = req.body as { userIds: string[] };
+  const tags = await tagService.addTags((req.params.id as string), req.userId!, userIds);
   res.json({ tags });
 }
 

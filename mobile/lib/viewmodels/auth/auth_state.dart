@@ -44,3 +44,4 @@ final class OtpSentState extends AuthState {
 final class OtpVerifiedState extends AuthState {
   const OtpVerifiedState();
 }
+

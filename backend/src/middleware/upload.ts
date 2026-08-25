@@ -31,6 +31,20 @@ export const uploadPostMedia = multer({
   },
 });
 
+const MAX_STORY_MEDIA_SIZE_BYTES = Number(process.env.MAX_STORY_MEDIA_SIZE_MB ?? 50) * 1024 * 1024;
+
+export const uploadStoryMedia = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_STORY_MEDIA_SIZE_BYTES },
+  fileFilter: (_req, file, cb) => {
+    const isAllowed = ALLOWED_POST_MEDIA_TYPES.some((prefix) => file.mimetype.startsWith(prefix));
+    if (!isAllowed) {
+      return cb(new HttpError(400, 'Only image or video uploads are allowed'));
+    }
+    cb(null, true);
+  },
+});
+
 const MAX_CHAT_ATTACHMENT_SIZE_BYTES = Number(process.env.MAX_CHAT_ATTACHMENT_SIZE_MB ?? 9) * 1024 * 1024;
 const ALLOWED_CHAT_ATTACHMENT_TYPES = ['image/', 'video/', 'application/pdf', 'audio/'];
 

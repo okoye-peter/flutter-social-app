@@ -1,5 +1,5 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:social_app/core/widgets/user_avatar.dart';
 
 const _brandColor = Color(0xFF0793F1);
 const _avatarSize = 60.0;
@@ -18,6 +18,7 @@ class StoryTile extends StatelessWidget {
     required this.isOwnStory,
     required this.hasUnseenStory,
     required this.onTap,
+    this.onAddTap,
   });
 
   final String avatarUrl;
@@ -25,7 +26,19 @@ class StoryTile extends StatelessWidget {
   final String label;
   final bool isOwnStory;
   final bool hasUnseenStory;
+
+  /// Tap target for the avatar/ring and label. For another user's tile
+  /// this opens their story viewer. For the own tile, once real story
+  /// data is wired in, this should open the viewer when the user already
+  /// has one or more active stories (a user can post many, grouped like a
+  /// WhatsApp status) — [onAddTap] is the separate, always-add target.
   final VoidCallback onTap;
+
+  /// Tap target for the own-story "+" badge only — always opens story
+  /// creation, regardless of whether the user already has active stories.
+  /// Falls back to [onTap] when not provided (e.g. before that add-vs-view
+  /// distinction has real data behind it).
+  final VoidCallback? onAddTap;
 
   static const _ringDiameter = _avatarSize + (_ringGap + _ringWidth) * 2;
 
@@ -71,20 +84,13 @@ class StoryTile extends StatelessWidget {
                         color: backgroundColor,
                       ),
                       padding: const EdgeInsets.all(_ringGap),
-                      child: CircleAvatar(
+                      child: UserAvatar(
+                        source: avatarUrl.trim().isNotEmpty
+                            ? avatarUrl
+                            : initials,
                         radius: _avatarSize / 2,
                         backgroundColor: theme.highlightColor,
-                        backgroundImage: avatarUrl.trim().isNotEmpty
-                            ? CachedNetworkImageProvider(avatarUrl)
-                            : null,
-                        child: avatarUrl.trim().isEmpty
-                            ? Text(
-                                initials,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              )
-                            : null,
+                        textColor: theme.colorScheme.onSurface,
                       ),
                     ),
                   ),
@@ -93,16 +99,19 @@ class StoryTile extends StatelessWidget {
                     Positioned(
                       bottom: 0,
                       right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: backgroundColor,
-                        ),
-                        child: const CircleAvatar(
-                          radius: 10,
-                          backgroundColor: _brandColor,
-                          child: Icon(Icons.add, size: 14, color: Colors.white),
+                      child: GestureDetector(
+                        onTap: onAddTap ?? onTap,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: backgroundColor,
+                          ),
+                          child: const CircleAvatar(
+                            radius: 10,
+                            backgroundColor: _brandColor,
+                            child: Icon(Icons.add, size: 14, color: Colors.white),
+                          ),
                         ),
                       ),
                     ),

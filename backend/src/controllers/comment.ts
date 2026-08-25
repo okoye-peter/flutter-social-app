@@ -8,7 +8,7 @@ export async function getComment(req: Request, res: Response) {
 }
 
 export async function updateComment(req: Request, res: Response) {
-  const { content } = req.body as { content?: string };
+  const { content } = req.body as { content: string };
   const comment = await commentService.updateComment((req.params.id as string), req.userId!, content);
   res.json({ comment });
 }

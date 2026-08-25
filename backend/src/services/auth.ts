@@ -5,13 +5,6 @@ import { hashToken } from '../lib/hash.js';
 import { signAccessToken } from '../lib/jwt.js';
 import { sendMail } from '../lib/email.js';
 import { HttpError } from '../lib/http-error.js';
-import {
-  isValidEmail,
-  isValidName,
-  isValidPassword,
-  isValidPhoneNumber,
-  isValidUsername,
-} from '../lib/validators.js';
 import { uploadImage } from './cloudinary.js';
 import { assertVerified, clearVerified } from './otp.js';
 import type { User } from '../../generated/prisma/index.js';
@@ -35,17 +28,17 @@ export interface TokenPair {
 }
 
 export interface RegisterInput {
-  name?: string;
-  username?: string;
-  email?: string;
-  phoneNumber?: string;
-  password?: string;
+  name: string;
+  username: string;
+  email: string;
+  phoneNumber: string;
+  password: string;
   imageFile?: { buffer: Buffer };
 }
 
 export interface LoginInput {
-  email?: string;
-  password?: string;
+  email: string;
+  password: string;
 }
 
 export function toSafeUser(user: User): SafeUser {
@@ -66,11 +59,7 @@ async function issueTokenPair(userId: string): Promise<TokenPair> {
   return { accessToken: signAccessToken(userId), refreshToken };
 }
 
-export async function refreshTokens(token: string | undefined): Promise<TokenPair> {
-  if (!token) {
-    throw new HttpError(400, 'refreshToken is required');
-  }
-
+export async function refreshTokens(token: string): Promise<TokenPair> {
   const stored = await prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(token) } });
   if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
     throw new HttpError(401, 'Invalid or expired refresh token');
@@ -97,25 +86,6 @@ export async function logoutUser(token: string | undefined): Promise<void> {
 
 export async function registerUser(input: RegisterInput): Promise<{ user: SafeUser } & TokenPair> {
   const { name, username, email, phoneNumber, password, imageFile } = input;
-
-  if (!name || !username || !email || !phoneNumber || !password) {
-    throw new HttpError(400, 'name, username, email, phoneNumber and password are required');
-  }
-  if (!isValidName(name)) {
-    throw new HttpError(400, 'Name is too short');
-  }
-  if (!isValidUsername(username)) {
-    throw new HttpError(400, '3-20 characters: letters, numbers, underscore only');
-  }
-  if (!isValidEmail(email)) {
-    throw new HttpError(400, 'Enter a valid email');
-  }
-  if (!isValidPhoneNumber(phoneNumber)) {
-    throw new HttpError(400, 'Enter a valid phone number');
-  }
-  if (!isValidPassword(password)) {
-    throw new HttpError(400, 'Password must be at least 6 characters');
-  }
 
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedPhone = phoneNumber.trim();
@@ -168,10 +138,6 @@ export async function registerUser(input: RegisterInput): Promise<{ user: SafeUs
 
 export async function loginUser(input: LoginInput): Promise<{ user: SafeUser } & TokenPair> {
   const { email, password } = input;
-  if (!email || !password) {
-    throw new HttpError(400, 'email and password are required');
-  }
-
   const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
   const isValid = user ? await verifyPassword(password, user.password) : false;
   if (!user || !isValid) {
@@ -189,11 +155,7 @@ export async function getUserById(userId: string): Promise<SafeUser> {
   return toSafeUser(user);
 }
 
-export async function requestPasswordReset(email: string | undefined): Promise<void> {
-  if (!email || !isValidEmail(email)) {
-    throw new HttpError(400, 'Enter a valid email');
-  }
-
+export async function requestPasswordReset(email: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
   if (user) {
     const rawToken = randomBytes(32).toString('hex');
@@ -215,14 +177,7 @@ export async function requestPasswordReset(email: string | undefined): Promise<v
   }
 }
 
-export async function resetPassword(token: string | undefined, newPassword: string | undefined): Promise<void> {
-  if (!token || !newPassword) {
-    throw new HttpError(400, 'token and newPassword are required');
-  }
-  if (!isValidPassword(newPassword)) {
-    throw new HttpError(400, 'Password must be at least 6 characters');
-  }
-
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
   const resetToken = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
   if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
     throw new HttpError(400, 'This reset link is invalid or has expired');

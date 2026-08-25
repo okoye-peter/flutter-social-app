@@ -10,13 +10,12 @@ import { getIo } from '../realtime/io.js';
 import { conversationRoom } from '../realtime/rooms.js';
 import type { Message, MessageType } from '../../generated/prisma/index.js';
 
-const MAX_CONTENT_LENGTH = 4000;
-const VALID_TYPES: MessageType[] = ['TEXT', 'IMAGE', 'VIDEO', 'FILE', 'VOICE_NOTE'];
+export const MAX_CONTENT_LENGTH = 4000;
 
 export interface SendMessageInput {
   conversationId: string;
   senderId: string;
-  type?: string;
+  type: string;
   content?: string;
   file?: { buffer: Buffer; mimetype: string; size: number; originalname: string };
   replyToId?: string;
@@ -24,52 +23,21 @@ export interface SendMessageInput {
   durationSeconds?: string;
 }
 
-function assertMimetypeMatchesType(type: MessageType, mimetype: string): void {
-  if (type === 'IMAGE' && !mimetype.startsWith('image/')) {
-    throw new HttpError(400, 'File must be an image for type IMAGE');
-  }
-  if (type === 'VIDEO' && !mimetype.startsWith('video/')) {
-    throw new HttpError(400, 'File must be a video for type VIDEO');
-  }
-  if (type === 'VOICE_NOTE' && !mimetype.startsWith('audio/')) {
-    throw new HttpError(400, 'File must be audio for type VOICE_NOTE');
-  }
-}
-
 export async function sendMessage(input: SendMessageInput): Promise<Message> {
   const { conversationId, senderId, content, file, replyToId, mentionedUserIds, durationSeconds } = input;
   await assertMembership(conversationId, senderId);
 
-  const requestedType = (input.type ?? (file ? 'FILE' : 'TEXT')).toUpperCase();
-  if (!VALID_TYPES.includes(requestedType as MessageType)) {
-    throw new HttpError(400, `type must be one of: ${VALID_TYPES.join(', ')}`);
-  }
-  const type = requestedType as MessageType;
-
-  const trimmedContent = content?.trim() || undefined;
-  if (type === 'TEXT' && !trimmedContent) {
-    throw new HttpError(400, 'content is required for a text message');
-  }
-  if (trimmedContent && trimmedContent.length > MAX_CONTENT_LENGTH) {
-    throw new HttpError(400, `Message must be at most ${MAX_CONTENT_LENGTH} characters`);
-  }
-  if (type !== 'TEXT' && !file) {
-    throw new HttpError(400, `A file is required for type ${type}`);
-  }
-
-  let duration: number | undefined;
-  if (type === 'VOICE_NOTE') {
-    duration = Number(durationSeconds);
-    if (!Number.isInteger(duration) || duration <= 0) {
-      throw new HttpError(400, 'durationSeconds must be a positive integer for a voice note');
-    }
-  }
+  // type, content, and durationSeconds are already resolved/validated by
+  // checkSendMessageFile (content is already trimmed) — this only derives
+  // what actually needs to be written.
+  const type = input.type as MessageType;
+  const trimmedContent = content;
+  const duration = type === 'VOICE_NOTE' ? Number(durationSeconds) : undefined;
 
   let fileUrl: string | undefined;
   let fileName: string | undefined;
   let fileSize: number | undefined;
   if (file) {
-    assertMimetypeMatchesType(type, file.mimetype);
     fileUrl = await uploadAttachment(file.buffer, 'chat-attachments');
     fileName = file.originalname;
     fileSize = file.size;
