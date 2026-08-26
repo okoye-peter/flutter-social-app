@@ -3,53 +3,55 @@ import 'dart:typed_data';
 import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:social_app/core/utils/validators.dart';
-import 'package:social_app/core/widgets/auth_submit_button.dart';
-import 'package:social_app/core/widgets/auth_text_field.dart';
+import 'package:social_app/core/di/service_locator.dart';
+import 'package:social_app/core/helpers/app_toast.dart';
+import 'package:social_app/core/storage/user_cache.dart';
 import 'package:social_app/models/user_model.dart';
+import 'package:social_app/viewmodels/auth/auth_bloc.dart';
+import 'package:social_app/viewmodels/users/user_bloc.dart';
+import 'package:social_app/views/settings/widgets/profile_card.dart';
 
 const _brandColor = Color(0xFF0793F1);
 
-class SettingScreen extends StatefulWidget {
+class SettingScreen extends StatelessWidget {
   const SettingScreen({super.key});
 
   @override
-  State<SettingScreen> createState() => _SettingScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider<UserBloc>(
+      create: (_) => UserBloc(),
+      child: const _SettingScreenBody(),
+    );
+  }
 }
 
-class _SettingScreenState extends State<SettingScreen> {
+class _SettingScreenBody extends StatefulWidget {
+  const _SettingScreenBody();
+
+  @override
+  State<_SettingScreenBody> createState() => _SettingScreenBodyState();
+}
+
+class _SettingScreenBodyState extends State<_SettingScreenBody> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _aboutController = TextEditingController();
   final _imagePicker = ImagePicker();
 
-  final _user = UserModel(
-    id: '1',
-    name: 'Alex Morgan',
-    phoneNumber: '+2348012345678',
-    image: '',
-    email: '',
-    fcmToken: '',
-    aboutMe: 'Living my best life.',
-    lastSeen: '',
-    createdAt: '',
-    isOnline: true,
-    friendsIds: const [],
-    friendRequestsIds: const [],
-    sentFriendRequestsIds: const [],
-  );
+  late UserModel _user;
 
   Uint8List? _avatarBytes;
   bool _isUploadingAvatar = false;
   bool _isEditing = false;
-  bool _isSaving = false;
   bool isDarkTheme = false;
 
   @override
   void initState() {
     super.initState();
+    _user = getIt<UserCache>().current!;
     _nameController.text = _user.name;
     _aboutController.text = _user.aboutMe;
     getThemeMode();
@@ -84,18 +86,23 @@ class _SettingScreenState extends State<SettingScreen> {
     );
     if (picked == null || !mounted) return;
 
-    final cropped = await ImageCropper().cropImage(
+    final CroppedFile? cropped = await ImageCropper().cropImage(
       sourcePath: picked.path,
-      aspectRatio: CropAspectRatio(ratioX: 1, ratioY: 1),
       uiSettings: [
         AndroidUiSettings(
           toolbarTitle: 'Crop photo',
           toolbarColor: _brandColor,
           toolbarWidgetColor: Colors.white,
           cropStyle: CropStyle.circle,
-          lockAspectRatio: true,
+          initAspectRatio: CropAspectRatioPreset.square,
+          lockAspectRatio: false,
         ),
-        IOSUiSettings(title: 'Crop photo', cropStyle: CropStyle.circle),
+        IOSUiSettings(
+          title: 'Crop photo',
+          cropStyle: CropStyle.circle,
+          aspectRatioLockEnabled: false,
+          resetAspectRatioEnabled: true,
+        ),
       ],
     );
     if (cropped == null || !mounted) return;
@@ -103,24 +110,25 @@ class _SettingScreenState extends State<SettingScreen> {
     final bytes = await cropped.readAsBytes();
     if (!mounted) return;
 
-    setState(() => _isUploadingAvatar = true);
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-
     setState(() {
       _avatarBytes = bytes;
-      _isUploadingAvatar = false;
+      _isUploadingAvatar = true;
     });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Profile photo updated')));
+
+    context.read<UserBloc>().add(
+      UpdateUserEvent(
+        user: _user,
+        imageBytes: bytes,
+        imageFileName: 'avatar_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      ),
+    );
   }
 
   void _removeAvatar() {
     Navigator.of(context).pop();
     setState(() {
       _avatarBytes = null;
-      _user.image = '';
+      _user = _user.copyWith(newImage: '');
     });
   }
 
@@ -133,35 +141,98 @@ class _SettingScreenState extends State<SettingScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (sheetContext) {
+        final colorScheme = Theme.of(sheetContext).colorScheme;
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              ListTile(
-                leading: const Icon(Icons.photo_camera_outlined),
-                title: const Text('Take a photo'),
-                onTap: () => _pickAvatar(ImageSource.camera),
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Choose from gallery'),
-                onTap: () => _pickAvatar(ImageSource.gallery),
-              ),
-              if (hasPhoto)
-                ListTile(
-                  leading: Icon(
-                    Icons.delete_outline_rounded,
-                    color: Theme.of(context).colorScheme.error,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  title: Text(
-                    'Remove photo',
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                  onTap: _removeAvatar,
                 ),
-              const SizedBox(height: 8),
-            ],
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'Profile photo',
+                    style: Theme.of(sheetContext).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  leading: Container(
+                    height: 38,
+                    width: 38,
+                    decoration: BoxDecoration(
+                      color: _brandColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(
+                      Icons.photo_camera_outlined,
+                      color: _brandColor,
+                      size: 20,
+                    ),
+                  ),
+                  title: const Text('Take a photo'),
+                  onTap: () => _pickAvatar(ImageSource.camera),
+                ),
+                ListTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  leading: Container(
+                    height: 38,
+                    width: 38,
+                    decoration: BoxDecoration(
+                      color: _brandColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(
+                      Icons.photo_library_outlined,
+                      color: _brandColor,
+                      size: 20,
+                    ),
+                  ),
+                  title: const Text('Choose from gallery'),
+                  onTap: () => _pickAvatar(ImageSource.gallery),
+                ),
+                if (hasPhoto)
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    leading: Container(
+                      height: 38,
+                      width: 38,
+                      decoration: BoxDecoration(
+                        color: colorScheme.error.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        color: colorScheme.error,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      'Remove photo',
+                      style: TextStyle(color: colorScheme.error),
+                    ),
+                    onTap: _removeAvatar,
+                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
         );
       },
@@ -180,24 +251,72 @@ class _SettingScreenState extends State<SettingScreen> {
     });
   }
 
-  Future<void> _onSaveProfile() async {
+  void _onSaveProfile() {
     final isFormValid = _formKey.currentState!.validate();
     if (!isFormValid) return;
     FocusScope.of(context).unfocus();
 
-    setState(() => _isSaving = true);
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
+    context.read<UserBloc>().add(
+      UpdateUserEvent(
+        user: _user.copyWith(
+          newName: _nameController.text.trim(),
+          newAboutMe: _aboutController.text.trim(),
+        ),
+      ),
+    );
+  }
 
-    setState(() {
-      _user.name = _nameController.text.trim();
-      _user.aboutMe = _aboutController.text.trim();
-      _isSaving = false;
-      _isEditing = false;
-    });
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Profile updated')));
+  void _onUserStateChanged(BuildContext context, UserState state) {
+    if (state is UserErrorState) {
+      setState(() {
+        _isUploadingAvatar = false;
+        _avatarBytes = null;
+      });
+      AppToast.error(state.message);
+      return;
+    }
+
+    if (state is UserUpdatedState) {
+      setState(() {
+        _user = state.user;
+        _avatarBytes = null;
+        _isUploadingAvatar = false;
+        _isEditing = false;
+      });
+      AppToast.success('User profile picture updated successfully');
+    }
+  }
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        final colorScheme = Theme.of(dialogContext).colorScheme;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text('Log out?'),
+          content: const Text(
+            'You will need to sign in again to access your account.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                context.read<AuthBloc>().add(LogoutEvent());
+              },
+              style: TextButton.styleFrom(foregroundColor: colorScheme.error),
+              child: const Text('Log out'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   ImageProvider? _avatarImage() {
@@ -211,224 +330,228 @@ class _SettingScreenState extends State<SettingScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final avatarImage = _avatarImage();
 
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-        children: [
-          Text(
-            'Settings',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 24),
-          Center(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                CircleAvatar(
-                  radius: 56,
-                  backgroundColor: colorScheme.surfaceContainerHighest,
-                  backgroundImage: avatarImage,
-                  child: avatarImage == null
-                      ? Text(
-                          _user.name.isNotEmpty
-                              ? _user.name[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        )
-                      : null,
+    return BlocConsumer<UserBloc, UserState>(
+      listener: _onUserStateChanged,
+      builder: (context, state) {
+        final isSaving = state is UserLoadingState;
+
+        return SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+            children: [
+              Text(
+                'Settings',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
                 ),
-                if (_isUploadingAvatar)
-                  Positioned.fill(
-                    child: CircleAvatar(
-                      radius: 56,
-                      backgroundColor: Colors.black.withValues(alpha: 0.45),
-                      child: const CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                Positioned(
-                  bottom: -2,
-                  right: -2,
-                  child: GestureDetector(
-                    onTap: _showAvatarOptions,
-                    child: Container(
-                      height: 34,
-                      width: 34,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _brandColor,
-                        border: Border.all(
-                          color: colorScheme.surface,
-                          width: 2.5,
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.camera_alt_rounded,
-                        size: 16,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Manage your profile and app preferences',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                if (_isEditing) ...[
-                  AuthTextField(
-                    controller: _nameController,
-                    label: 'Full name',
-                    icon: Icons.person_outline_rounded,
-                    textInputAction: TextInputAction.next,
-                    validator: validateName,
-                  ),
-                  const SizedBox(height: 16),
-                  AuthTextField(
-                    controller: _aboutController,
-                    label: 'About me',
-                    icon: Icons.info_outline_rounded,
-                    textInputAction: TextInputAction.done,
-                  ),
-                ] else ...[
-                  Center(
-                    child: Text(
-                      _user.name,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Center(
-                    child: Text(
-                      _user.aboutMe.isNotEmpty
-                          ? _user.aboutMe
-                          : 'No bio added yet',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+              ),
+              const SizedBox(height: 24),
+              ProfileCard(
+                colorScheme: colorScheme,
+                avatarImage: avatarImage,
+                isUploadingAvatar: _isUploadingAvatar,
+                onAvatarTap: _showAvatarOptions,
+                isEditing: _isEditing,
+                isSaving: isSaving,
+                formKey: _formKey,
+                nameController: _nameController,
+                aboutController: _aboutController,
+                user: _user,
+                onEditProfile: _onEditProfile,
+                onCancelEdit: _onCancelEdit,
+                onSaveProfile: _onSaveProfile,
+              ),
+              const SizedBox(height: 28),
+              _SectionLabel(label: 'Preferences'),
+              const SizedBox(height: 10),
+              _SettingsGroup(
+                colorScheme: colorScheme,
+                children: [
+                  _SettingsTile(
+                    colorScheme: colorScheme,
+                    iconBackground: isDarkTheme
+                        ? Colors.indigo.withValues(alpha: 0.16)
+                        : Colors.orange.withValues(alpha: 0.16),
+                    iconColor: isDarkTheme
+                        ? Colors.indigo.shade300
+                        : Colors.orange.shade700,
+                    icon: isDarkTheme
+                        ? Icons.nightlight_rounded
+                        : Icons.wb_sunny_rounded,
+                    title: 'Dark mode',
+                    subtitle: isDarkTheme ? 'On' : 'Off',
+                    trailing: Switch.adaptive(
+                      value: isDarkTheme,
+                      activeThumbColor: _brandColor,
+                      onChanged: (bool value) {
+                        setState(() {
+                          isDarkTheme = value;
+                        });
+                        if (value) {
+                          AdaptiveTheme.of(context).setDark();
+                        } else {
+                          AdaptiveTheme.of(context).setLight();
+                        }
+                      },
                     ),
                   ),
                 ],
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.phone_outlined,
-                      size: 16,
+              ),
+              const SizedBox(height: 28),
+              _SectionLabel(label: 'Account'),
+              const SizedBox(height: 10),
+              _SettingsGroup(
+                colorScheme: colorScheme,
+                children: [
+                  _SettingsTile(
+                    colorScheme: colorScheme,
+                    iconBackground: colorScheme.error.withValues(alpha: 0.12),
+                    iconColor: colorScheme.error,
+                    icon: Icons.logout_rounded,
+                    title: 'Log out',
+                    titleColor: colorScheme.error,
+                    trailing: Icon(
+                      Icons.chevron_right_rounded,
                       color: colorScheme.onSurfaceVariant,
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _user.phoneNumber,
-                      style: TextStyle(color: colorScheme.onSurfaceVariant),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      Icons.verified_rounded,
-                      size: 16,
-                      color: Colors.green.shade600,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                if (_isEditing)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 54,
-                          child: OutlinedButton(
-                            onPressed: _isSaving ? null : _onCancelEdit,
-                            style: OutlinedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: const Text('Cancel'),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: AuthSubmitButton(
-                          label: 'Save',
-                          isLoading: _isSaving,
-                          onPressed: _onSaveProfile,
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: OutlinedButton.icon(
-                      onPressed: _onEditProfile,
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Edit profile'),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
+                    onTap: _confirmLogout,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(
+        label.toUpperCase(),
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsGroup extends StatelessWidget {
+  const _SettingsGroup({required this.colorScheme, required this.children});
+
+  final ColorScheme colorScheme;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            children[i],
+            if (i != children.length - 1)
+              Divider(
+                height: 1,
+                indent: 68,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsTile extends StatelessWidget {
+  const _SettingsTile({
+    required this.colorScheme,
+    required this.iconBackground,
+    required this.iconColor,
+    required this.icon,
+    required this.title,
+    required this.trailing,
+    this.subtitle,
+    this.titleColor,
+    this.onTap,
+  });
+
+  final ColorScheme colorScheme;
+  final Color iconBackground;
+  final Color iconColor;
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final Color? titleColor;
+  final Widget trailing;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Row(
+          children: [
+            Container(
+              height: 38,
+              width: 38,
+              decoration: BoxDecoration(
+                color: iconBackground,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(icon, size: 20, color: iconColor),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: titleColor,
                     ),
                   ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-          Text(
-            'Preferences',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: SwitchListTile(
-              title: const Text('Change Theme'),
-              secondary: Container(
-                height: 30,
-                width: 30,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isDarkTheme ? Colors.white : Colors.black,
-                ),
-                child: Icon(
-                  isDarkTheme
-                      ? Icons.nightlight_rounded
-                      : Icons.wb_sunny_rounded,
-                  color: isDarkTheme ? Colors.black : Colors.white,
-                ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle!,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
               ),
-              value: isDarkTheme,
-              onChanged: (bool value) {
-                setState(() {
-                  isDarkTheme = value;
-                });
-                if (value) {
-                  AdaptiveTheme.of(context).setDark();
-                } else {
-                  AdaptiveTheme.of(context).setLight();
-                }
-              },
             ),
-          ),
-        ],
+            trailing,
+          ],
+        ),
       ),
     );
   }

@@ -1,33 +1,47 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:social_app/core/helpers/app_toast.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/utils/formatters.dart';
 import 'package:social_app/core/widgets/auth_scaffold.dart';
 import 'package:social_app/core/widgets/otp_verification_form.dart';
+import 'package:social_app/models/registration_draft.dart';
+import 'package:social_app/viewmodels/auth/auth_bloc.dart';
 
 class PhoneVerificationScreen extends StatelessWidget {
-  const PhoneVerificationScreen({super.key, required this.phoneNumber});
+  const PhoneVerificationScreen({super.key, required this.draft});
 
-  final String phoneNumber;
+  final RegistrationDraft draft;
+
+  // Guaranteed set by this point in the flow — RegisterPhoneScreen only
+  // navigates here after attaching a phoneNumber to the draft.
+  String get phoneNumber => draft.phoneNumber!;
 
   Future<String?> _onVerify(BuildContext context, String code) async {
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (!context.mounted) return null;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Phone number verified successfully')),
+    final state = await context.read<AuthBloc>().addAndAwait(
+      VerifyPhoneOtpEvent(phoneNumber: phoneNumber, code: code),
+      (s) => s is OtpVerifiedState,
     );
-    context.go(AppRoutes.feeds);
+    if (!context.mounted) return null;
+    if (state is AuthErrorState) return state.errorMessage;
+
+    context.push(AppRoutes.registerDetails, extra: draft);
     return null;
   }
 
   Future<void> _onResend(BuildContext context) async {
-    await Future.delayed(const Duration(milliseconds: 700));
+    final state = await context.read<AuthBloc>().addAndAwait(
+      SendPhoneOtpEvent(phoneNumber: phoneNumber),
+      (s) => s is OtpSentState,
+    );
     if (!context.mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Verification code resent')),
-    );
+    if (state is AuthErrorState) {
+      AppToast.error(state.errorMessage);
+    } else {
+      AppToast.success('Verification code resent');
+    }
   }
 
   @override

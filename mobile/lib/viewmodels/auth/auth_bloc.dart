@@ -15,8 +15,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc() : super(AuthInitial()) {
     on<RegisterEvent>(_processRegistration, transformer: droppable());
     on<LoginEvent>(_processLogin, transformer: droppable());
-    on<FetchAuthenticatedUserEvent>(_processGetAuthUser, transformer: droppable());
+    on<FetchAuthenticatedUserEvent>(
+      _processGetAuthUser,
+      transformer: droppable(),
+    );
     on<LogoutEvent>(_processLogout, transformer: droppable());
+    on<SendEmailOtpEvent>(_processSendEmailOtp, transformer: droppable());
+    on<VerifyEmailOtpEvent>(_processVerifyEmailOtp, transformer: droppable());
+    on<SendPhoneOtpEvent>(_processSendPhoneOtp, transformer: droppable());
+    on<VerifyPhoneOtpEvent>(_processVerifyPhoneOtp, transformer: droppable());
   }
 
   final AuthRepository _repo = getIt<AuthRepository>();
@@ -91,5 +98,85 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(AuthErrorState(message));
       }
     }
+  }
+
+  Future<void> _processSendEmailOtp(
+    SendEmailOtpEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoadingState());
+    try {
+      await _repo.sendEmailOtp(event.email);
+      emit(const OtpSentState());
+    } catch (e) {
+      final message = e is AppException
+          ? e.message
+          : 'Failed to send verification code';
+      emit(AuthErrorState(message));
+    }
+  }
+
+  Future<void> _processVerifyEmailOtp(
+    VerifyEmailOtpEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoadingState());
+    try {
+      await _repo.verifyEmailOtp(event.email, event.code);
+      emit(const OtpVerifiedState());
+    } catch (e) {
+      final message = e is AppException
+          ? e.message
+          : 'Invalid verification code';
+      emit(AuthErrorState(message));
+    }
+  }
+
+  Future<void> _processSendPhoneOtp(
+    SendPhoneOtpEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoadingState());
+    try {
+      await _repo.sendPhoneOtp(event.phoneNumber);
+      emit(const OtpSentState());
+    } catch (e) {
+      final message = e is AppException
+          ? e.message
+          : 'Failed to send verification code';
+      emit(AuthErrorState(message));
+    }
+  }
+
+  Future<void> _processVerifyPhoneOtp(
+    VerifyPhoneOtpEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoadingState());
+    try {
+      await _repo.verifyPhoneOtp(event.phoneNumber, event.code);
+      emit(const OtpVerifiedState());
+    } catch (e) {
+      final message = e is AppException
+          ? e.message
+          : 'Invalid verification code';
+      emit(AuthErrorState(message));
+    }
+  }
+}
+
+/// Dispatches an event and resolves once the bloc reaches either the
+/// caller-defined success state or [AuthErrorState] — the OTP screens use
+/// this to bridge a fire-and-forget bloc event into the single
+/// Future-returning result their verify/resend callbacks need.
+extension AuthBlocAwait on AuthBloc {
+  Future<AuthState> addAndAwait(
+    AuthEvent event,
+    bool Function(AuthState state) isSuccess,
+  ) async {
+    add(event);
+    return stream.firstWhere(
+      (state) => isSuccess(state) || state is AuthErrorState,
+    );
   }
 }

@@ -18,7 +18,8 @@ class Constants {
       "Enter your email address to reset password";
   static const String resetPasswordSuccess =
       "Reset password link has been sent to your email address";
-  static const String resetPasswordFailed = "Failed to send reset password link";
+  static const String resetPasswordFailed =
+      "Failed to send reset password link";
   static const String resetPasswordEmailNotFound = "Email not found";
   static const String resetPasswordEmailNotVerified = "Email not verified";
   static const String resetPasswordEmailNotVerifiedDescription =

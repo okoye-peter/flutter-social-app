@@ -21,7 +21,19 @@ String maskEmail(String email) {
 
   final local = trimmed.substring(0, atIndex);
   final domain = trimmed.substring(atIndex);
-  final visible = local.length <= 2 ? local.substring(0, 1) : local.substring(0, 2);
+  final visible = local.length <= 2
+      ? local.substring(0, 1)
+      : local.substring(0, 2);
 
   return '$visible***$domain';
+}
+
+/// Formats a count for compact display, e.g. 950 -> "950", 1500 -> "1.5K",
+/// 2500000 -> "2.5M".
+String formatCount(int count) {
+  if (count < 1000) return '$count';
+  if (count < 1000000) {
+    return '${(count / 1000).toStringAsFixed(count % 1000 >= 100 ? 1 : 0)}K';
+  }
+  return '${(count / 1000000).toStringAsFixed(count % 1000000 >= 100000 ? 1 : 0)}M';
 }

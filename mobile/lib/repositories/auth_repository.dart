@@ -20,7 +20,7 @@ class AuthRepository {
     try {
       final result = await _dio.post(
         '/auth/register',
-        data: registerData.toJson(),
+        data: registerData.toFormData(),
       );
 
       final auth = AuthResponseModel.fromJson(
@@ -30,6 +30,47 @@ class AuthRepository {
       return auth;
     } on DioException catch (e) {
       throw _mapError(e, 'Registration failed');
+    }
+  }
+
+  Future<void> sendEmailOtp(String email) async {
+    try {
+      await _dio.post('/auth/otp/email/send', data: {'email': email});
+    } on DioException catch (e) {
+      throw _mapError(e, 'Failed to send verification code');
+    }
+  }
+
+  Future<void> verifyEmailOtp(String email, String code) async {
+    try {
+      await _dio.post(
+        '/auth/otp/email/verify',
+        data: {'email': email, 'code': code},
+      );
+    } on DioException catch (e) {
+      throw _mapError(e, 'Invalid verification code');
+    }
+  }
+
+  Future<void> sendPhoneOtp(String phoneNumber) async {
+    try {
+      await _dio.post(
+        '/auth/otp/phone/send',
+        data: {'phoneNumber': phoneNumber},
+      );
+    } on DioException catch (e) {
+      throw _mapError(e, 'Failed to send verification code');
+    }
+  }
+
+  Future<void> verifyPhoneOtp(String phoneNumber, String code) async {
+    try {
+      await _dio.post(
+        '/auth/otp/phone/verify',
+        data: {'phoneNumber': phoneNumber, 'code': code},
+      );
+    } on DioException catch (e) {
+      throw _mapError(e, 'Invalid verification code');
     }
   }
 
@@ -87,6 +128,9 @@ class AuthRepository {
   AppException _mapError(DioException e, String fallback) {
     final data = e.response?.data;
     final message = data is Map ? data['error'] as String? : null;
-    return AppException(message ?? fallback, statusCode: e.response?.statusCode);
+    return AppException(
+      message ?? fallback,
+      statusCode: e.response?.statusCode,
+    );
   }
 }

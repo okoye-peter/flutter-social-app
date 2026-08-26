@@ -36,3 +36,12 @@ final class AuthErrorState extends AuthState {
   @override
   List<Object> get props => [errorMessage];
 }
+
+final class OtpSentState extends AuthState {
+  const OtpSentState();
+}
+
+final class OtpVerifiedState extends AuthState {
+  const OtpVerifiedState();
+}
+

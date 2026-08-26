@@ -1,15 +1,24 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { prisma } from '../prisma.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
+import { hashToken } from '../lib/hash.js';
 import { signAccessToken } from '../lib/jwt.js';
 import { sendMail } from '../lib/email.js';
 import { HttpError } from '../lib/http-error.js';
-import { isValidEmail, isValidName, isValidPassword, isValidPhoneNumber } from '../lib/validators.js';
 import { uploadImage } from './cloudinary.js';
+import { assertVerified, clearVerified } from './otp.js';
 import type { User } from '../../generated/prisma/index.js';
 
-const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// How long a password-reset link stays valid. Kept short (10 min) since a
+// leaked or forwarded reset email is a real attack window — long TTLs give
+// an attacker more time to use a token they shouldn't have.
+const RESET_TOKEN_TTL_MS = 10 * 60 * 1000;
+
+// How long a refresh token stays valid before the user has to log in again.
+// Much longer than the reset token on purpose: it's issued straight to the
+// user's own device after they've already authenticated, not sent over
+// email, so the leak risk it's guarding against is different.
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export type SafeUser = Omit<User, 'password'>;
 
@@ -19,30 +28,22 @@ export interface TokenPair {
 }
 
 export interface RegisterInput {
-  name?: string;
-  email?: string;
-  phoneNumber?: string;
-  password?: string;
-}
-
-export interface LoginInput {
-  email?: string;
-  password?: string;
-}
-
-export interface UpdateProfileInput {
-  name?: string;
-  aboutMe?: string;
+  name: string;
+  username: string;
+  email: string;
+  phoneNumber: string;
+  password: string;
   imageFile?: { buffer: Buffer };
 }
 
-function toSafeUser(user: User): SafeUser {
-  const { password: _password, ...safeUser } = user;
-  return safeUser;
+export interface LoginInput {
+  email: string;
+  password: string;
 }
 
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
+export function toSafeUser(user: User): SafeUser {
+  const { password: _password, ...safeUser } = user;
+  return safeUser;
 }
 
 async function issueTokenPair(userId: string): Promise<TokenPair> {
@@ -58,11 +59,7 @@ async function issueTokenPair(userId: string): Promise<TokenPair> {
   return { accessToken: signAccessToken(userId), refreshToken };
 }
 
-export async function refreshTokens(token: string | undefined): Promise<TokenPair> {
-  if (!token) {
-    throw new HttpError(400, 'refreshToken is required');
-  }
-
+export async function refreshTokens(token: string): Promise<TokenPair> {
   const stored = await prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(token) } });
   if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
     throw new HttpError(401, 'Invalid or expired refresh token');
@@ -88,49 +85,59 @@ export async function logoutUser(token: string | undefined): Promise<void> {
 }
 
 export async function registerUser(input: RegisterInput): Promise<{ user: SafeUser } & TokenPair> {
-  const { name, email, phoneNumber, password } = input;
+  const { name, username, email, phoneNumber, password, imageFile } = input;
 
-  if (!name || !email || !phoneNumber || !password) {
-    throw new HttpError(400, 'name, email, phoneNumber and password are required');
-  }
-  if (!isValidName(name)) {
-    throw new HttpError(400, 'Name is too short');
-  }
-  if (!isValidEmail(email)) {
-    throw new HttpError(400, 'Enter a valid email');
-  }
-  if (!isValidPhoneNumber(phoneNumber)) {
-    throw new HttpError(400, 'Enter a valid phone number');
-  }
-  if (!isValidPassword(password)) {
-    throw new HttpError(400, 'Password must be at least 6 characters');
-  }
+  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedPhone = phoneNumber.trim();
+  const normalizedUsername = username.trim();
 
+  // Email and phone must already be OTP-verified before an account can be
+  // created with them — this is what the mobile registration flow's
+  // verification steps are actually gating.
+  await assertVerified(normalizedEmail, 'EMAIL');
+  await assertVerified(normalizedPhone, 'PHONE');
+
+  // Checked separately (not just OR'd into one query) so the error can name
+  // the specific field that's taken — username especially, since that's
+  // the one thing the user can immediately fix by choosing another value,
+  // unlike email/phone which they can't just retype.
   const existing = await prisma.user.findFirst({
-    where: { OR: [{ email: email.trim().toLowerCase() }, { phoneNumber: phoneNumber.trim() }] },
+    where: {
+      OR: [{ email: normalizedEmail }, { phoneNumber: normalizedPhone }, { username: normalizedUsername }],
+    },
+    select: { email: true, phoneNumber: true, username: true },
   });
   if (existing) {
-    throw new HttpError(409, 'An account with this email or phone number already exists');
+    if (existing.username === normalizedUsername) {
+      throw new HttpError(409, 'This username is already taken, please choose another one');
+    }
+    if (existing.email === normalizedEmail) {
+      throw new HttpError(409, 'An account with this email already exists');
+    }
+    throw new HttpError(409, 'An account with this phone number already exists');
   }
+
+  const image = imageFile ? await uploadImage(imageFile.buffer, 'profile-images') : undefined;
 
   const user = await prisma.user.create({
     data: {
       name: name.trim(),
-      email: email.trim().toLowerCase(),
-      phoneNumber: phoneNumber.trim(),
+      username: normalizedUsername,
+      email: normalizedEmail,
+      phoneNumber: normalizedPhone,
       password: await hashPassword(password),
+      ...(image !== undefined ? { image } : {}),
     },
   });
+
+  await clearVerified(normalizedEmail, 'EMAIL');
+  await clearVerified(normalizedPhone, 'PHONE');
 
   return { user: toSafeUser(user), ...(await issueTokenPair(user.id)) };
 }
 
 export async function loginUser(input: LoginInput): Promise<{ user: SafeUser } & TokenPair> {
   const { email, password } = input;
-  if (!email || !password) {
-    throw new HttpError(400, 'email and password are required');
-  }
-
   const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
   const isValid = user ? await verifyPassword(password, user.password) : false;
   if (!user || !isValid) {
@@ -148,11 +155,7 @@ export async function getUserById(userId: string): Promise<SafeUser> {
   return toSafeUser(user);
 }
 
-export async function requestPasswordReset(email: string | undefined): Promise<void> {
-  if (!email || !isValidEmail(email)) {
-    throw new HttpError(400, 'Enter a valid email');
-  }
-
+export async function requestPasswordReset(email: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
   if (user) {
     const rawToken = randomBytes(32).toString('hex');
@@ -174,14 +177,7 @@ export async function requestPasswordReset(email: string | undefined): Promise<v
   }
 }
 
-export async function resetPassword(token: string | undefined, newPassword: string | undefined): Promise<void> {
-  if (!token || !newPassword) {
-    throw new HttpError(400, 'token and newPassword are required');
-  }
-  if (!isValidPassword(newPassword)) {
-    throw new HttpError(400, 'Password must be at least 6 characters');
-  }
-
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
   const resetToken = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
   if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
     throw new HttpError(400, 'This reset link is invalid or has expired');
@@ -197,24 +193,4 @@ export async function resetPassword(token: string | undefined, newPassword: stri
       data: { usedAt: new Date() },
     }),
   ]);
-}
-
-export async function updateProfile(userId: string, input: UpdateProfileInput): Promise<SafeUser> {
-  const { name, aboutMe, imageFile } = input;
-  if (name !== undefined && !isValidName(name)) {
-    throw new HttpError(400, 'Name is too short');
-  }
-
-  const image = imageFile ? await uploadImage(imageFile.buffer, 'profile-images') : undefined;
-
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      ...(name !== undefined ? { name: name.trim() } : {}),
-      ...(aboutMe !== undefined ? { aboutMe: aboutMe.trim() } : {}),
-      ...(image !== undefined ? { image } : {}),
-    },
-  });
-
-  return toSafeUser(user);
 }

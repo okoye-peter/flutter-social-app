@@ -24,7 +24,8 @@ class NotificationService {
 
     await _localNotifications
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.createNotificationChannel(_channel);
 
     await _localNotifications.initialize(
@@ -41,7 +42,9 @@ class NotificationService {
   Future<void> registerToken(String userId) async {
     final token = await _messaging.getToken();
     if (token != null) await _sendTokenToBackend(userId, token);
-    _messaging.onTokenRefresh.listen((token) => _sendTokenToBackend(userId, token));
+    _messaging.onTokenRefresh.listen(
+      (token) => _sendTokenToBackend(userId, token),
+    );
   }
 
   Future<void> _sendTokenToBackend(String userId, String token) async {
