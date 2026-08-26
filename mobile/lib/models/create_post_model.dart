@@ -26,10 +26,11 @@ class CreatePostModel extends Equatable {
 
   Map<String, dynamic> toJson() {
     return {
-      'kind': kind,
+      if (kind != null) 'kind': kind,
       'caption': caption,
-      'taggedUserIds': taggedUserIds != null && taggedUserIds!.isNotEmpty ? jsonEncode(taggedUserIds) : null,
-      'soundId': soundId,
+      if (taggedUserIds != null && taggedUserIds!.isNotEmpty)
+        'taggedUserIds': jsonEncode(taggedUserIds),
+      if (soundId != null) 'soundId': soundId,
     };
   }
 

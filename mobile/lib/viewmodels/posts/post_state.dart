@@ -4,7 +4,7 @@ sealed class PostState extends Equatable {
   const PostState();
 
   @override
-  List<Object> get props => [];
+  List<Object?> get props => [];
 }
 
 final class PostInitialState extends PostState {}
@@ -26,17 +26,15 @@ final class PostLoadedState extends PostState {
   const PostLoadedState({
     required this.posts,
     required this.hasMorePage,
-    required this.currentPage,
-    required this.nextPage,
+    required this.nextCursor,
   });
 
   final List<PostModel> posts;
   final bool hasMorePage;
-  final int currentPage;
-  final int nextPage;
+  final String? nextCursor;
 
   @override
-  List<Object> get props => [posts, hasMorePage, currentPage, nextPage];
+  List<Object?> get props => [posts, hasMorePage, nextCursor];
 }
 
 final class PostErrorState extends PostState {

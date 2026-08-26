@@ -12,13 +12,21 @@ part 'post_state.dart';
 class PostBloc extends Bloc<PostEvent, PostState> {
   PostBloc() : super(PostInitialState()) {
     on<CreatePostEvent>(_processCreatePost, transformer: droppable());
+    on<FetchPostsEvent>(
+      (event, emit) => _processFetchPost(cursor: null, emit: emit),
+      transformer: droppable(),
+    );
+    on<FetchMovePostsEvent>(
+      (event, emit) => _processFetchPost(cursor: event.cursor, emit: emit),
+      transformer: droppable(),
+    );
   }
 
   final PostRepository _repo = PostRepository();
 
   Future<void> _processCreatePost(
     CreatePostEvent event,
-    Emitter<PostState> emit
+    Emitter<PostState> emit,
   ) async {
     emit(PostLoadingState());
     try {
@@ -26,6 +34,28 @@ class PostBloc extends Bloc<PostEvent, PostState> {
       emit(PostCreatedState(post: newPost));
     } catch (e) {
       final message = e is AppException ? e.message : 'Failed to create post';
+      emit(PostErrorState(message: message));
+    }
+  }
+
+  Future<void> _processFetchPost({
+    String? cursor,
+    required Emitter<PostState> emit,
+  }) async {
+    final isFirstPage = cursor == null;
+    if (isFirstPage) emit(PostLoadingState());
+    try {
+      final result = await _repo.fetchPosts(cursor: cursor);
+      final previousPosts = state is PostLoadedState && !isFirstPage
+          ? (state as PostLoadedState).posts
+          : <PostModel>[];
+      emit(PostLoadedState(
+        posts: [...previousPosts, ...result.posts],
+        hasMorePage: result.hasMorePage,
+        nextCursor: result.nextCursor,
+      ));
+    } catch (e) {
+      final message = e is AppException ? e.message : 'Failed to load posts';
       emit(PostErrorState(message: message));
     }
   }

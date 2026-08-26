@@ -21,14 +21,10 @@ final class FetchPostsEvent extends PostEvent {
 }
 
 final class FetchMovePostsEvent extends PostEvent {
-  const FetchMovePostsEvent({
-    required this.hasMorePage,
-    required this.page
-  });
+  const FetchMovePostsEvent({required this.cursor});
 
-  final bool hasMorePage;
-  final int page;
+  final String cursor;
 
   @override
-  List<Object> get props => [page, hasMorePage];
+  List<Object> get props => [cursor];
 }

@@ -232,7 +232,7 @@ class _CreateFeedScreenState extends State<CreateFeedScreen> {
                 return ListView.separated(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: sounds.length + (_selectedSound == null ? 0 : 1),
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     if (_selectedSound != null && index == 0) {
                       return ListTile(
@@ -382,6 +382,7 @@ class _CreateFeedScreenState extends State<CreateFeedScreen> {
                       minLines: 3,
                       maxLength: _maxCaptionLength,
                       style: const TextStyle(fontSize: 16),
+                      textInputAction: TextInputAction.done,
                       decoration: const InputDecoration(
                         hintText: "What's on your mind?",
                         border: InputBorder.none,
