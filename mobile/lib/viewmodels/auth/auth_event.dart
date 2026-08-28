@@ -29,6 +29,11 @@ class LogoutEvent extends AuthEvent {}
 
 class FetchAuthenticatedUserEvent extends AuthEvent {}
 
+/// Fired when DioClient clears local tokens after a failed refresh —
+/// tokens are already gone locally, so this only updates state/navigation,
+/// unlike [LogoutEvent] which also calls the server to revoke the session.
+class SessionExpiredEvent extends AuthEvent {}
+
 class SendEmailOtpEvent extends AuthEvent {
   const SendEmailOtpEvent({required this.email});
 

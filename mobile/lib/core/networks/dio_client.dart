@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:social_app/core/auth/auth_session_notifier.dart';
 import 'package:social_app/core/constants/api_constants.dart';
 import 'package:social_app/core/storage/token_storage.dart';
 import 'package:social_app/core/storage/user_cache.dart';
@@ -10,8 +11,11 @@ const _refreshPath = '/auth/refresh';
 class DioClient {
   DioClient._();
 
-  static Dio create(TokenStorage tokenStorage, UserCache userCache) {
-    print(ApiConstants.baseUrl);
+  static Dio create(
+    TokenStorage tokenStorage,
+    UserCache userCache,
+    AuthSessionNotifier sessionNotifier,
+  ) {
     final dio = Dio(
       BaseOptions(
         baseUrl: ApiConstants.baseUrl,
@@ -54,6 +58,7 @@ class DioClient {
             if (newTokens == null) {
               await tokenStorage.clear();
               await userCache.clear();
+              sessionNotifier.notifySessionExpired();
               return handler.next(error);
             }
 
@@ -66,6 +71,7 @@ class DioClient {
             refreshFuture = null;
             await tokenStorage.clear();
             await userCache.clear();
+            sessionNotifier.notifySessionExpired();
             return handler.next(error);
           }
         },

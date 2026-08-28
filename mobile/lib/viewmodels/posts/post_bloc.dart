@@ -13,13 +13,14 @@ class PostBloc extends Bloc<PostEvent, PostState> {
   PostBloc() : super(PostInitialState()) {
     on<CreatePostEvent>(_processCreatePost, transformer: droppable());
     on<FetchPostsEvent>(
-      (event, emit) => _processFetchPost(cursor: null, emit: emit),
+      (event, emit) => _processFetchPosts(cursor: null, emit: emit),
       transformer: droppable(),
     );
     on<FetchMovePostsEvent>(
-      (event, emit) => _processFetchPost(cursor: event.cursor, emit: emit),
+      (event, emit) => _processFetchPosts(cursor: event.cursor, emit: emit),
       transformer: droppable(),
     );
+    on<GetPostDetailsEvent>(_processFetchPostDetails, transformer: droppable());
   }
 
   final PostRepository _repo = PostRepository();
@@ -38,7 +39,7 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     }
   }
 
-  Future<void> _processFetchPost({
+  Future<void> _processFetchPosts({
     String? cursor,
     required Emitter<PostState> emit,
   }) async {
@@ -46,16 +47,34 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     if (isFirstPage) emit(PostLoadingState());
     try {
       final result = await _repo.fetchPosts(cursor: cursor);
-      final previousPosts = state is PostLoadedState && !isFirstPage
-          ? (state as PostLoadedState).posts
+      final previousPosts = state is PostsLoadedState && !isFirstPage
+          ? (state as PostsLoadedState).posts
           : <PostModel>[];
-      emit(PostLoadedState(
-        posts: [...previousPosts, ...result.posts],
-        hasMorePage: result.hasMorePage,
-        nextCursor: result.nextCursor,
-      ));
+      emit(
+        PostsLoadedState(
+          posts: [...previousPosts, ...result.posts],
+          hasMorePage: result.hasMorePage,
+          nextCursor: result.nextCursor,
+        ),
+      );
     } catch (e) {
       final message = e is AppException ? e.message : 'Failed to load posts';
+      emit(PostErrorState(message: message));
+    }
+  }
+
+  Future<void> _processFetchPostDetails(
+    GetPostDetailsEvent event,
+    Emitter emit,
+  ) async {
+    emit(PostLoadingState());
+    try {
+      final post = await _repo.getPostDetails(event.postId);
+      emit(PostDetailsLoadedState(post: post));
+    } catch (e) {
+      final message = e is AppException
+          ? e.message
+          : 'Failed to fetch post details';
       emit(PostErrorState(message: message));
     }
   }

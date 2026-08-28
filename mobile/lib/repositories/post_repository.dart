@@ -28,7 +28,8 @@ class PostRepository {
       }
 
       final result = await _dio.post('/posts', data: formData);
-      return PostModel.fromJson(result.data.post);
+      final data = result.data as Map<String, dynamic>;
+      return PostModel.fromJson(data['post'] as Map<String, dynamic>);
     } on DioException catch (e) {
       throw _mapError(e, 'Failed to create post');
     }
@@ -41,6 +42,16 @@ class PostRepository {
         queryParameters: {'cursor': ?cursor, 'limit': ?limit},
       );
       return PostsPage.fromJson(result.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw _mapError(e, 'Failed to load posts');
+    }
+  }
+
+  Future<PostModel> getPostDetails(String PostId) async {
+    try {
+      final result = await _dio.get('/post/$PostId');
+      final data = result.data as Map<String, dynamic>;
+      return PostModel.fromJson(data['post']);
     } on DioException catch (e) {
       throw _mapError(e, 'Failed to load posts');
     }

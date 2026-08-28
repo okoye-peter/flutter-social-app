@@ -1,12 +1,11 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:social_app/core/utils/formatters.dart';
+import 'package:social_app/core/widgets/user_avatar.dart';
 import 'package:social_app/views/feeds/widgets/image_background.dart';
 import 'package:social_app/views/feeds/widgets/reel_action.dart';
 import 'package:social_app/core/enums/app_enums.dart';
-import 'package:social_app/views/feeds/widgets/reel_media_shimmer.dart';
 import 'package:social_app/views/feeds/widgets/reel_text_shadow.dart';
 import 'package:social_app/views/feeds/widgets/reel_user_profile.dart';
 import 'package:social_app/views/feeds/widgets/round_icon_button.dart';
@@ -93,11 +92,14 @@ class ReelsTile extends StatefulWidget {
 }
 
 class _ReelsTileState extends State<ReelsTile> {
+  static const _videoLoadTimeout = Duration(seconds: 12);
+
   VideoPlayerController? _controller;
   AudioPlayer? _audioPlayer;
   bool _isMuted = true;
   bool _isLiked = false;
   bool _isVisible = true;
+  bool _hasVideoError = false;
   late int _likeCount = widget.likeCount;
   late bool _isFollowing = widget.isFollowing;
 
@@ -118,22 +120,14 @@ class _ReelsTileState extends State<ReelsTile> {
   void initState() {
     super.initState();
     if (_isVideo) {
-      _controller =
-          VideoPlayerController.networkUrl(Uri.parse(widget.mediaUrl!))
-            ..setLooping(true)
-            ..setVolume(0)
-            ..initialize().then((_) {
-              if (!mounted) return;
-              setState(() {});
-              _controller!.play();
-            });
+      _initVideo();
     } else if (_hasSound) {
       _audioPlayer = AudioPlayer();
       _audioPlayer!.setLoopMode(LoopMode.one);
       _audioPlayer!.setVolume(0);
       _audioPlayer!.setUrl(widget.soundUrl!).then((_) {
         if (!mounted) return;
-        _audioPlayer!.play();
+        if (_isVisible) _audioPlayer!.play();
       });
     }
   }
@@ -143,6 +137,32 @@ class _ReelsTileState extends State<ReelsTile> {
     _controller?.dispose();
     _audioPlayer?.dispose();
     super.dispose();
+  }
+
+  Future<void> _initVideo() async {
+    setState(() => _hasVideoError = false);
+    final controller =
+        VideoPlayerController.networkUrl(Uri.parse(widget.mediaUrl!))
+          ..setLooping(true)
+          ..setVolume(0);
+    _controller = controller;
+    try {
+      await controller.initialize().timeout(_videoLoadTimeout);
+    } catch (_) {
+      controller.dispose();
+      if (!mounted) return;
+      setState(() {
+        _controller = null;
+        _hasVideoError = true;
+      });
+      return;
+    }
+    if (!mounted) {
+      controller.dispose();
+      return;
+    }
+    setState(() {});
+    if (_isVisible) controller.play();
   }
 
   void _togglePlayPause() {
@@ -164,6 +184,7 @@ class _ReelsTileState extends State<ReelsTile> {
   }
 
   void _handleVisibilityChanged(VisibilityInfo info) {
+    if (!mounted) return;
     final isVisible = info.visibleFraction >= _visibilityPlayThreshold;
     if (isVisible == _isVisible) return;
     setState(() => _isVisible = isVisible);
@@ -187,6 +208,10 @@ class _ReelsTileState extends State<ReelsTile> {
   }
 
   void _handleTap() {
+    if (_hasVideoError) {
+      _initVideo();
+      return;
+    }
     if (widget.mode == ReelInteractionMode.feed) {
       widget.onTapReel?.call();
       return;
@@ -218,6 +243,25 @@ class _ReelsTileState extends State<ReelsTile> {
   Widget _buildBackground() {
     switch (widget.mediaType) {
       case MediaType.video:
+        if (_hasVideoError) {
+          return const ColoredBox(
+            color: Colors.black,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.wifi_off_rounded, color: Colors.white54, size: 40),
+                  SizedBox(height: 12),
+                  Text(
+                    "Couldn't load video\nTap to retry",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white54, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         final controller = _controller;
         return controller != null
             ? VideoBackground(controller: controller)
@@ -337,14 +381,15 @@ class _ReelsTileState extends State<ReelsTile> {
                         ),
                         child: ClipOval(
                           child: widget.avatarUrl.trim().isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: widget.avatarUrl,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) =>
-                                      const ReelMediaShimmer(),
-                                  errorWidget: (context, url, error) =>
-                                      const ColoredBox(color: Colors.white24),
-                                )
+                              ? UserAvatar(source: widget.avatarUrl, radius: 20)
+                              // CachedNetworkImage(
+                              //     imageUrl: widget.avatarUrl,
+                              //     fit: BoxFit.cover,
+                              //     placeholder: (context, url) =>
+                              //         const ReelMediaShimmer(),
+                              //     errorWidget: (context, url, error) =>
+                              //         const ColoredBox(color: Colors.white24),
+                              //   )
                               : const ColoredBox(color: Colors.white24),
                         ),
                       ),

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:social_app/core/auth/auth_session_notifier.dart';
 import 'package:social_app/core/di/service_locator.dart';
 import 'package:social_app/core/errors/app_exception.dart';
 import 'package:social_app/models/login_model.dart';
@@ -20,13 +23,25 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       transformer: droppable(),
     );
     on<LogoutEvent>(_processLogout, transformer: droppable());
+    on<SessionExpiredEvent>(_processSessionExpired, transformer: droppable());
     on<SendEmailOtpEvent>(_processSendEmailOtp, transformer: droppable());
     on<VerifyEmailOtpEvent>(_processVerifyEmailOtp, transformer: droppable());
     on<SendPhoneOtpEvent>(_processSendPhoneOtp, transformer: droppable());
     on<VerifyPhoneOtpEvent>(_processVerifyPhoneOtp, transformer: droppable());
+
+    _sessionExpiredSub = getIt<AuthSessionNotifier>().onSessionExpired.listen(
+      (_) => add(SessionExpiredEvent()),
+    );
   }
 
   final AuthRepository _repo = getIt<AuthRepository>();
+  late final StreamSubscription<void> _sessionExpiredSub;
+
+  @override
+  Future<void> close() {
+    _sessionExpiredSub.cancel();
+    return super.close();
+  }
 
   Future<void> _processRegistration(
     RegisterEvent event,
@@ -65,6 +80,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       // regardless of outcome, so the session is gone locally either way —
       // a failed server-side revoke shouldn't block the state transition.
     }
+    emit(const AuthUnauthenticatedState());
+  }
+
+  Future<void> _processSessionExpired(
+    SessionExpiredEvent event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(const AuthUnauthenticatedState());
   }
 

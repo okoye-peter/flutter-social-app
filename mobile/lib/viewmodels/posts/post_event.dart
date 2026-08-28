@@ -16,6 +16,15 @@ final class CreatePostEvent extends PostEvent {
   List<Object> get props => [post];
 }
 
+final class GetPostDetailsEvent extends PostEvent {
+  const GetPostDetailsEvent({required this.postId});
+
+  final String postId;
+
+  @override
+  List<Object> get props => [postId];
+}
+
 final class FetchPostsEvent extends PostEvent {
   const FetchPostsEvent();
 }

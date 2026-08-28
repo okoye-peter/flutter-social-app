@@ -13,6 +13,7 @@ import 'package:social_app/repositories/story_repository.dart';
 import 'package:social_app/core/enums/app_enums.dart';
 import 'package:social_app/viewmodels/posts/post_bloc.dart';
 import 'package:social_app/viewmodels/stories/story_bloc.dart';
+import 'package:social_app/views/feeds/widgets/feed_loading_shimmer.dart';
 import 'package:social_app/views/feeds/widgets/reels_tile.dart';
 import 'package:social_app/views/feeds/widgets/story_tile.dart';
 
@@ -76,10 +77,10 @@ class _FeedsScreenState extends State<FeedsScreen> {
           final storyGroups = storyState is StoryLoadedState
                               ? storyState.stories : const <StoryGroupModel>[];
 
-          final posts = postState is PostLoadedState
+          final posts = postState is PostsLoadedState
                               ? postState.posts : const <PostModel>[];
 
-          return _buildScaffold(context, storyGroups, posts);
+          return _buildScaffold(context, storyGroups, posts, postState);
         },
       ),
     );
@@ -89,6 +90,7 @@ class _FeedsScreenState extends State<FeedsScreen> {
     BuildContext context,
     List<StoryGroupModel> storyGroups,
     List<PostModel> posts,
+    PostState postState,
   ) {
     final theme = Theme.of(context);
     final UserModel? user = getIt<UserCache>().current;
@@ -219,26 +221,55 @@ class _FeedsScreenState extends State<FeedsScreen> {
             ),
           ),
           // reels
-          SliverFixedExtentList(
-            itemExtent: _reelCardHeight,
-            delegate: SliverChildBuilderDelegate((_, int index) {
-              final post = posts[index];
-              return ReelsTile(
-                mediaUrl: post.mediaUrl,
-                mediaType: post.mediaType,
-                mode: ReelInteractionMode.feed,
-                avatarUrl: post.user?.image ?? '',
-                username: post.user?.username ?? 'friend',
-                caption: post.caption ?? '',
-                soundTitle: post.sound?.title,
-                likeCount: post.likesCount,
-                repostCount: post.repostsCount,
-                commentCount: post.commentsCount,
-                onTapReel: () =>
-                    context.push(AppRoutes.feedDetailsPath(post.id)),
-              );
-            }, childCount: posts.length),
-          ),
+          if (postState is PostErrorState)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Text(postState.message, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () => context
+                          .read<PostBloc>()
+                          .add(const FetchPostsEvent()),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (postState is PostLoadingState && posts.isEmpty)
+            SliverFixedExtentList(
+              itemExtent: _reelCardHeight,
+              delegate: SliverChildBuilderDelegate(
+                (_, _) => FeedLoadingShimmer(cardHeight: _reelCardHeight),
+                childCount: 2,
+              ),
+            )
+          else
+            SliverFixedExtentList(
+              itemExtent: _reelCardHeight,
+              delegate: SliverChildBuilderDelegate((_, int index) {
+                final post = posts[index];
+                return ReelsTile(
+                  mediaUrl: post.mediaUrl,
+                  mediaType: post.mediaType,
+                  mode: ReelInteractionMode.feed,
+                  avatarUrl: post.user?.image ?? '',
+                  username: post.user?.username ?? 'friend',
+                  caption: post.caption ?? '',
+                  soundTitle: post.sound?.title,
+                  likeCount: post.likesCount,
+                  repostCount: post.repostsCount,
+                  commentCount: post.commentsCount,
+                  onTapReel: () => context.push(
+                    AppRoutes.feedDetailsPath(post.id),
+                    extra: post,
+                  ),
+                );
+              }, childCount: posts.length),
+            ),
         ],
       ),
     );

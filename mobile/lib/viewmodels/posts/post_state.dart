@@ -22,8 +22,8 @@ final class PostCreatedState extends PostState {
   List<Object> get props => [post];
 }
 
-final class PostLoadedState extends PostState {
-  const PostLoadedState({
+final class PostsLoadedState extends PostState {
+  const PostsLoadedState({
     required this.posts,
     required this.hasMorePage,
     required this.nextCursor,
@@ -44,6 +44,15 @@ final class PostErrorState extends PostState {
 
   @override
   List<String> get props => [message];
+}
+
+final class PostDetailsLoadedState extends PostState {
+  const PostDetailsLoadedState({required this.post});
+
+  final PostModel post;
+
+  @override
+  List<Object> get props => [post];
 }
 
 final class FetchPostDetails extends PostState {

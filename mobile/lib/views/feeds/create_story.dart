@@ -252,7 +252,7 @@ class _CreateStoryScreenState extends State<CreateStoryScreen> {
                     )
                   : const Text(
                       'Share',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      style: TextStyle(fontWeight: FontWeight.w700 , color: Colors.white),
                     ),
             ),
           ),
