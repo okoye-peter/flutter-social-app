@@ -92,8 +92,7 @@ class _CreateFeedScreenState extends State<CreateFeedScreen> {
 
     final bytes = await picked.readAsBytes();
     final controller = VideoPlayerController.file(File(picked.path))
-      ..setLooping(true)
-      ..setVolume(0);
+      ..setLooping(true);
     await controller.initialize();
     if (!mounted) {
       controller.dispose();
@@ -232,7 +231,7 @@ class _CreateFeedScreenState extends State<CreateFeedScreen> {
                 return ListView.separated(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: sounds.length + (_selectedSound == null ? 0 : 1),
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     if (_selectedSound != null && index == 0) {
                       return ListTile(
@@ -307,7 +306,7 @@ class _CreateFeedScreenState extends State<CreateFeedScreen> {
         listener: (context, state) {
           if (state is PostCreatedState) {
             AppToast.success('post created successfully');
-            context.pop();
+            context.pop(true);
           }
 
           if (state is PostErrorState) {
@@ -345,7 +344,7 @@ class _CreateFeedScreenState extends State<CreateFeedScreen> {
                     ),
                     child: isLoading ? const CircularProgressIndicator() : const Text(
                       'Post',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
                     ),
                   ),
                 ),
@@ -382,6 +381,7 @@ class _CreateFeedScreenState extends State<CreateFeedScreen> {
                       minLines: 3,
                       maxLength: _maxCaptionLength,
                       style: const TextStyle(fontSize: 16),
+                      textInputAction: TextInputAction.done,
                       decoration: const InputDecoration(
                         hintText: "What's on your mind?",
                         border: InputBorder.none,
@@ -404,7 +404,7 @@ class _CreateFeedScreenState extends State<CreateFeedScreen> {
                           ? _showMediaPicker
                           : null,
                       child: AspectRatio(
-                        aspectRatio: 6 / 8,
+                        aspectRatio: 6 / 10,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(16),
                           child: Stack(

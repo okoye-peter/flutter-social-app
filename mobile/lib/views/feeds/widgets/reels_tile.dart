@@ -1,12 +1,11 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:social_app/core/utils/formatters.dart';
+import 'package:social_app/core/widgets/user_avatar.dart';
 import 'package:social_app/views/feeds/widgets/image_background.dart';
 import 'package:social_app/views/feeds/widgets/reel_action.dart';
 import 'package:social_app/core/enums/app_enums.dart';
-import 'package:social_app/views/feeds/widgets/reel_media_shimmer.dart';
 import 'package:social_app/views/feeds/widgets/reel_text_shadow.dart';
 import 'package:social_app/views/feeds/widgets/reel_user_profile.dart';
 import 'package:social_app/views/feeds/widgets/round_icon_button.dart';
@@ -41,12 +40,20 @@ class ReelsTile extends StatefulWidget {
     this.repostCount = 0,
     this.commentCount = 0,
     this.shareCount = 0,
+    this.bookMarkCount = 0,
     this.onTapReel,
     this.onTapProfile,
     this.onTapFollow,
     this.onTapLike,
     this.onTapComment,
     this.onTapShare,
+    this.onTapBookMark,
+    this.onTapRepost,
+    this.likedByMe = false,
+    this.bookMarkedByMe = false,
+    this.repostedByMe = false,
+    this.repostedByUsername,
+    this.repostComment,
   }) : assert(
          mediaType == MediaType.text || mediaUrl != null,
          'mediaUrl is required for image/video posts',
@@ -78,27 +85,51 @@ class ReelsTile extends StatefulWidget {
   final int repostCount;
   final int commentCount;
   final int shareCount;
+  final int bookMarkCount;
 
   /// Feed mode only — called when the reel is tapped to open its
   /// details page.
   final VoidCallback? onTapReel;
   final VoidCallback? onTapProfile;
   final VoidCallback? onTapFollow;
-  final VoidCallback? onTapLike;
-  final VoidCallback? onTapComment;
-  final VoidCallback? onTapShare;
+  final Future<void> Function()? onTapLike;
+  final Future<void> Function()? onTapComment;
+  final Future<void> Function()? onTapShare;
+  final Future<void> Function()? onTapBookMark;
+  final Future<void> Function()? onTapRepost;
+
+  final bool likedByMe;
+  final bool bookMarkedByMe;
+  final bool repostedByMe;
+
+  /// Feed mode only — non-null when this tile is showing because
+  /// [repostedByUsername] reposted it, rather than being the viewer's own
+  /// following of the original author. A quote-repost also sets
+  /// [repostComment]; a plain repost leaves it null.
+  final String? repostedByUsername;
+  final String? repostComment;
 
   @override
   State<ReelsTile> createState() => _ReelsTileState();
 }
 
 class _ReelsTileState extends State<ReelsTile> {
+  static const _videoLoadTimeout = Duration(seconds: 12);
+
   VideoPlayerController? _controller;
   AudioPlayer? _audioPlayer;
   bool _isMuted = true;
-  bool _isLiked = false;
+  late bool _isLiked = widget.likedByMe;
+  late bool _isBookMarked = widget.bookMarkedByMe;
+  late bool _isReposted = widget.repostedByMe;
   bool _isVisible = true;
+  bool _hasVideoError = false;
+  bool _isLikeSubmitting = false;
   late int _likeCount = widget.likeCount;
+  bool _isBookMarkSubmitting = false;
+  late int _bookMarkCount = widget.bookMarkCount;
+  bool _isRepostSubmitting = false;
+  late int _repostCount = widget.repostCount;
   late bool _isFollowing = widget.isFollowing;
 
   /// Stable across rebuilds (unlike a key generated inline in build),
@@ -118,22 +149,14 @@ class _ReelsTileState extends State<ReelsTile> {
   void initState() {
     super.initState();
     if (_isVideo) {
-      _controller =
-          VideoPlayerController.networkUrl(Uri.parse(widget.mediaUrl!))
-            ..setLooping(true)
-            ..setVolume(0)
-            ..initialize().then((_) {
-              if (!mounted) return;
-              setState(() {});
-              _controller!.play();
-            });
+      _initVideo();
     } else if (_hasSound) {
       _audioPlayer = AudioPlayer();
       _audioPlayer!.setLoopMode(LoopMode.one);
       _audioPlayer!.setVolume(0);
       _audioPlayer!.setUrl(widget.soundUrl!).then((_) {
         if (!mounted) return;
-        _audioPlayer!.play();
+        if (_isVisible) _audioPlayer!.play();
       });
     }
   }
@@ -143,6 +166,32 @@ class _ReelsTileState extends State<ReelsTile> {
     _controller?.dispose();
     _audioPlayer?.dispose();
     super.dispose();
+  }
+
+  Future<void> _initVideo() async {
+    setState(() => _hasVideoError = false);
+    final controller =
+        VideoPlayerController.networkUrl(Uri.parse(widget.mediaUrl!))
+          ..setLooping(true)
+          ..setVolume(0);
+    _controller = controller;
+    try {
+      await controller.initialize().timeout(_videoLoadTimeout);
+    } catch (_) {
+      controller.dispose();
+      if (!mounted) return;
+      setState(() {
+        _controller = null;
+        _hasVideoError = true;
+      });
+      return;
+    }
+    if (!mounted) {
+      controller.dispose();
+      return;
+    }
+    setState(() {});
+    if (_isVisible) controller.play();
   }
 
   void _togglePlayPause() {
@@ -164,6 +213,7 @@ class _ReelsTileState extends State<ReelsTile> {
   }
 
   void _handleVisibilityChanged(VisibilityInfo info) {
+    if (!mounted) return;
     final isVisible = info.visibleFraction >= _visibilityPlayThreshold;
     if (isVisible == _isVisible) return;
     setState(() => _isVisible = isVisible);
@@ -187,6 +237,10 @@ class _ReelsTileState extends State<ReelsTile> {
   }
 
   void _handleTap() {
+    if (_hasVideoError) {
+      _initVideo();
+      return;
+    }
     if (widget.mode == ReelInteractionMode.feed) {
       widget.onTapReel?.call();
       return;
@@ -202,12 +256,37 @@ class _ReelsTileState extends State<ReelsTile> {
     }
   }
 
-  void _toggleLike() {
+  Future<void> _toggleLike() async {
+    if (_isLikeSubmitting) return;
     setState(() {
       _isLiked = !_isLiked;
       _likeCount += _isLiked ? 1 : -1;
+      _isLikeSubmitting = true;
     });
-    widget.onTapLike?.call();
+    await widget.onTapLike?.call();
+    if (mounted) setState(() => _isLikeSubmitting = false);
+  }
+
+  Future<void> _toggleBookMark() async {
+    if (_isBookMarkSubmitting) return;
+    setState(() {
+      _isBookMarked = !_isBookMarked;
+      _bookMarkCount += _isBookMarked ? 1 : -1;
+      _isBookMarkSubmitting = true;
+    });
+    await widget.onTapBookMark?.call();
+    if (mounted) setState(() => _isBookMarkSubmitting = false);
+  }
+
+  Future<void> _toggleRepost() async {
+    if (_isRepostSubmitting) return;
+    setState(() {
+      _isReposted = !_isReposted;
+      _repostCount += _isReposted ? 1 : -1;
+      _isRepostSubmitting = true;
+    });
+    await widget.onTapRepost?.call();
+    if (mounted) setState(() => _isRepostSubmitting = false);
   }
 
   void _toggleFollow() {
@@ -218,6 +297,25 @@ class _ReelsTileState extends State<ReelsTile> {
   Widget _buildBackground() {
     switch (widget.mediaType) {
       case MediaType.video:
+        if (_hasVideoError) {
+          return const ColoredBox(
+            color: Colors.black,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.wifi_off_rounded, color: Colors.white54, size: 40),
+                  SizedBox(height: 12),
+                  Text(
+                    "Couldn't load video\nTap to retry",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white54, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         final controller = _controller;
         return controller != null
             ? VideoBackground(controller: controller)
@@ -232,6 +330,7 @@ class _ReelsTileState extends State<ReelsTile> {
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
+    final theme = Theme.of(context);
 
     return VisibilityDetector(
       key: _visibilityKey,
@@ -292,18 +391,98 @@ class _ReelsTileState extends State<ReelsTile> {
                   ),
                 ),
 
+              if (widget.repostedByUsername != null)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  right: 60,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            CupertinoIcons.repeat,
+                            size: 14,
+                            color: Colors.white,
+                            shadows: reelTextShadow,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Reposted by ${widget.repostedByUsername}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                shadows: reelTextShadow,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (widget.repostComment != null &&
+                          widget.repostComment!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            widget.repostComment!,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
               Positioned(
                 right: 8,
-                bottom: 200,
+                bottom: 120,
                 child: Column(
                   children: [
                     // like
-                    ReelAction(
-                      icon: _isLiked ? Icons.favorite : Icons.favorite_border,
-                      iconColor: _isLiked ? Colors.redAccent : Colors.white,
-                      label: formatCount(_likeCount),
-                      onTap: _toggleLike,
-                    ),
+                    _isLikeSubmitting
+                        ? const SizedBox(
+                            width: 30,
+                            height: 46,
+                            child: Center(
+                              child: SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.4,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          )
+                        : ReelAction(
+                            icon: _isLiked
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            iconColor: _isLiked
+                                ? Colors.redAccent
+                                : Colors.white,
+                            label: formatCount(_likeCount),
+                            onTap: _toggleLike,
+                          ),
                     const SizedBox(height: 18),
                     // comment
                     ReelAction(
@@ -319,11 +498,59 @@ class _ReelsTileState extends State<ReelsTile> {
                       onTap: () => widget.onTapShare?.call(),
                     ),
                     const SizedBox(height: 18),
-                    ReelAction(
-                      icon: CupertinoIcons.arrow_2_squarepath,
-                      label: formatCount(widget.repostCount),
-                      onTap: () => widget.onTapShare?.call(),
-                    ),
+                    // bookmark
+                    _isBookMarkSubmitting
+                        ? const SizedBox(
+                            width: 30,
+                            height: 46,
+                            child: Center(
+                              child: SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.4,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          )
+                        : ReelAction(
+                            icon: _isBookMarked
+                                ? CupertinoIcons.bookmark_fill
+                                : CupertinoIcons.bookmark,
+                            iconColor: _isBookMarked
+                                ? theme.colorScheme.onPrimaryContainer
+                                : Colors.white,
+                            label: formatCount(_bookMarkCount),
+                            onTap: _toggleBookMark,
+                          ),
+                    const SizedBox(height: 18),
+                    // repost
+                    _isRepostSubmitting
+                        ? const SizedBox(
+                            width: 30,
+                            height: 46,
+                            child: Center(
+                              child: SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.4,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          )
+                        : ReelAction(
+                            icon: _isReposted
+                                ? CupertinoIcons.arrow_2_squarepath
+                                : CupertinoIcons.repeat,
+                            iconColor: _isReposted
+                                ? theme.colorScheme.onSecondary
+                                : Colors.white,
+                            label: formatCount(_repostCount),
+                            onTap: _toggleRepost,
+                          ),
                     const SizedBox(height: 18),
 
                     GestureDetector(
@@ -337,14 +564,7 @@ class _ReelsTileState extends State<ReelsTile> {
                         ),
                         child: ClipOval(
                           child: widget.avatarUrl.trim().isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: widget.avatarUrl,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) =>
-                                      const ReelMediaShimmer(),
-                                  errorWidget: (context, url, error) =>
-                                      const ColoredBox(color: Colors.white24),
-                                )
+                              ? UserAvatar(source: widget.avatarUrl, radius: 20)
                               : const ColoredBox(color: Colors.white24),
                         ),
                       ),

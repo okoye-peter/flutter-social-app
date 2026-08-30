@@ -5,19 +5,18 @@ import 'package:go_router/go_router.dart';
 import 'package:social_app/core/di/service_locator.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/storage/user_cache.dart';
+import 'package:social_app/models/feed_item_model.dart';
+import 'package:social_app/models/post_model.dart';
 import 'package:social_app/models/story_model.dart';
 import 'package:social_app/models/story_viewer_args.dart';
 import 'package:social_app/models/user_model.dart';
 import 'package:social_app/repositories/story_repository.dart';
 import 'package:social_app/core/enums/app_enums.dart';
+import 'package:social_app/viewmodels/posts/post_bloc.dart';
 import 'package:social_app/viewmodels/stories/story_bloc.dart';
+import 'package:social_app/views/feeds/widgets/feed_loading_shimmer.dart';
 import 'package:social_app/views/feeds/widgets/reels_tile.dart';
 import 'package:social_app/views/feeds/widgets/story_tile.dart';
-
-// TODO: temporary sample used to test reels video playback — replace
-// with a real Post.mediaUrl once the feed is wired to the backend.
-const _sampleReelVideoUrl =
-    'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4';
 
 const _storyItemWidth = 80.0;
 const _storyRowHeight = 120.0;
@@ -40,10 +39,20 @@ class _FeedsScreenState extends State<FeedsScreen> {
     }
   }
 
-  Future<void> _createFeeds() async {
+  Future<void> _createFeeds(BuildContext context) async {
     final sharedFeeds = await context.push<bool>(AppRoutes.createFeeds);
-    if(sharedFeeds == true && mounted){
-      context.read<StoryBloc>().add(const LoadStoryEvent());
+    if (sharedFeeds == true && context.mounted) {
+      context.read<PostBloc>().add(const FetchPostsEvent());
+    }
+  }
+
+  Future<void> _openReelDetails(BuildContext context, PostModel post) async {
+    final updated = await context.push<PostModel>(
+      AppRoutes.feedDetailsPath(post.id),
+      extra: post,
+    );
+    if (updated != null && context.mounted) {
+      context.read<PostBloc>().add(SyncPostEvent(post: updated));
     }
   }
 
@@ -65,14 +74,26 @@ class _FeedsScreenState extends State<FeedsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => StoryBloc()..add(const LoadStoryEvent()),
-      child: BlocBuilder<StoryBloc, StoryState>(
-        builder: (context, state) {
-          final storyGroups = state is StoryLoadedState
-              ? state.stories
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => StoryBloc()..add(const LoadStoryEvent())),
+        BlocProvider(create: (_) => PostBloc()..add(const FetchPostsEvent())),
+        // (_) => StoryBloc()..add(const LoadStoryEvent())
+      ],
+      child: Builder(
+        builder: (context) {
+          final storyState = context.watch<StoryBloc>().state;
+          final postState = context.watch<PostBloc>().state;
+
+          final storyGroups = storyState is StoryLoadedState
+              ? storyState.stories
               : const <StoryGroupModel>[];
-          return _buildScaffold(context, storyGroups);
+
+          final items = postState is PostsLoadedState
+              ? postState.items
+              : const <FeedItemModel>[];
+
+          return _buildScaffold(context, storyGroups, items, postState);
         },
       ),
     );
@@ -81,6 +102,8 @@ class _FeedsScreenState extends State<FeedsScreen> {
   Widget _buildScaffold(
     BuildContext context,
     List<StoryGroupModel> storyGroups,
+    List<FeedItemModel> items,
+    PostState postState,
   ) {
     final theme = Theme.of(context);
     final UserModel? user = getIt<UserCache>().current;
@@ -100,7 +123,7 @@ class _FeedsScreenState extends State<FeedsScreen> {
       appBar: AppBar(
         centerTitle: true,
         leading: IconButton(
-          onPressed: () => context.push(AppRoutes.createFeeds),
+          onPressed: () => _createFeeds(context),
           icon: Icon(Icons.add, color: theme.tabBarTheme.labelColor, size: 30),
         ),
         title: GestureDetector(
@@ -211,29 +234,64 @@ class _FeedsScreenState extends State<FeedsScreen> {
             ),
           ),
           // reels
-          SliverFixedExtentList(
-            itemExtent: _reelCardHeight,
-            delegate: SliverChildBuilderDelegate((_, int index) {
-              // TODO: use the real post id once the feed is wired to
-              // the backend, instead of this synthesized sample id.
-              final reelId = 'sample-$index';
-              return ReelsTile(
-                mediaUrl: _sampleReelVideoUrl,
-                mediaType: MediaType.video,
-                mode: ReelInteractionMode.feed,
-                avatarUrl: user?.image ?? '',
-                username: user?.username ?? 'friend',
-                caption: 'Testing reels video playback 🎬',
-                soundTitle: '${user?.name ?? 'Friend'} · original audio',
-                likeCount: 128,
-                repostCount: 100,
-                commentCount: 42,
-                shareCount: 7,
-                onTapReel: () =>
-                    context.push(AppRoutes.feedDetailsPath(reelId)),
-              );
-            }, childCount: 5),
-          ),
+          if (postState is PostErrorState)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Text(postState.message, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () =>
+                          context.read<PostBloc>().add(const FetchPostsEvent()),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (postState is PostLoadingState && items.isEmpty)
+            SliverFixedExtentList(
+              itemExtent: _reelCardHeight,
+              delegate: SliverChildBuilderDelegate(
+                (_, _) => FeedLoadingShimmer(cardHeight: _reelCardHeight),
+                childCount: 2,
+              ),
+            )
+          else
+            SliverFixedExtentList(
+              itemExtent: _reelCardHeight,
+              delegate: SliverChildBuilderDelegate((_, int index) {
+                final feedItem = items[index];
+                final post = feedItem.post;
+                final repost = feedItem.repost;
+                return ReelsTile(
+                  mediaUrl: post.mediaUrl,
+                  mediaType: post.mediaType,
+                  mode: ReelInteractionMode.feed,
+                  avatarUrl: post.user?.image ?? post.user?.getInitials ?? '?',
+                  username: post.user?.username ?? 'friend',
+                  caption: post.caption ?? '',
+                  soundTitle: post.sound?.title,
+                  likeCount: post.likesCount,
+                  repostCount: post.repostsCount,
+                  commentCount: post.commentsCount,
+                  bookMarkCount: post.bookmarksCount,
+                  likedByMe: post.likedByMe,
+                  bookMarkedByMe: post.bookmarkedByMe,
+                  repostedByMe: post.repostedByMe,
+                  repostedByUsername: repost?.repostedBy.username,
+                  repostComment: repost?.comment,
+                  onTapLike: () => context.read<PostBloc>().toggleLike(post),
+                  onTapBookMark: () =>
+                      context.read<PostBloc>().toggleBookMark(post),
+                  onTapRepost: () =>
+                      context.read<PostBloc>().toggleRepost(post),
+                  onTapReel: () => _openReelDetails(context, post),
+                );
+              }, childCount: items.length),
+            ),
         ],
       ),
     );

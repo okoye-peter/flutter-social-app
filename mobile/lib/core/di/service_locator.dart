@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:social_app/core/auth/auth_session_notifier.dart';
 import 'package:social_app/core/networks/dio_client.dart';
 import 'package:social_app/core/storage/token_storage.dart';
 import 'package:social_app/core/storage/user_cache.dart';
@@ -24,8 +25,14 @@ Future<void> setupLocator() async {
   userCache.load();
   getIt.registerSingleton<UserCache>(userCache);
 
+  getIt.registerSingleton<AuthSessionNotifier>(AuthSessionNotifier());
+
   getIt.registerSingleton<Dio>(
-    DioClient.create(getIt<TokenStorage>(), getIt<UserCache>()),
+    DioClient.create(
+      getIt<TokenStorage>(),
+      getIt<UserCache>(),
+      getIt<AuthSessionNotifier>(),
+    ),
   );
 
   getIt.registerSingleton<NotificationService>(

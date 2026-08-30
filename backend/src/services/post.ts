@@ -17,19 +17,42 @@ export interface CreatePostInput {
   soundId?: string;
 }
 
+// Deliberately excludes password/email/phoneNumber/fcmToken — this goes
+// out to every viewer of the feed, not just the post's own author.
+export type PostAuthor = { id: string; name: string; username: string; image: string };
+
 export type PostWithViewerState = Post & {
+  user: PostAuthor;
   likedByMe: boolean;
   bookmarkedByMe: boolean;
   repostedByMe: boolean;
 };
 
+export interface RepostInfo {
+  id: string;
+  comment: string | null;
+  createdAt: Date;
+  repostedBy: PostAuthor;
+}
+
+export interface FeedItem {
+  post: PostWithViewerState;
+  repost: RepostInfo | null;
+}
+
 const VIEWER_STATE_INCLUDE = (viewerId: string) => ({
+  user: { select: { id: true, name: true, username: true, image: true } },
   likes: { where: { userId: viewerId }, select: { id: true } },
   bookmarks: { where: { userId: viewerId }, select: { id: true } },
   reposts: { where: { userId: viewerId }, select: { id: true } },
 });
 
-type PostWithRawViewerState = Post & { likes: { id: string }[]; bookmarks: { id: string }[]; reposts: { id: string }[] };
+type PostWithRawViewerState = Post & {
+  user: PostAuthor;
+  likes: { id: string }[];
+  bookmarks: { id: string }[];
+  reposts: { id: string }[];
+};
 
 function withViewerState(post: PostWithRawViewerState): PostWithViewerState {
   const { likes, bookmarks, reposts, ...rest } = post;
@@ -103,10 +126,18 @@ export async function deletePost(postId: string, userId: string): Promise<void> 
   ]);
 }
 
+// A feed page interleaves two different tables (original posts and
+// reposts, possibly with a quote comment) into one time-ordered stream.
+// Fetching `limit + 1` from *each* source before merging is what makes
+// this correct: the true top-K of a merge can never need more than K
+// items from either single source, so this is enough to guarantee the
+// merged top `limit + 1` (and therefore hasMore/nextCursor) is accurate.
+type FeedCandidate = { createdAt: Date; id: string; item: FeedItem };
+
 export async function listFeed(
   viewerId: string,
   query: { kind?: string; cursor?: string; limit?: string },
-): Promise<CursorPage<PostWithViewerState>> {
+): Promise<CursorPage<FeedItem>> {
   const limit = parseLimit(query.limit);
   const cursor = decodeCursor(query.cursor);
   const kind = query.kind?.toUpperCase();
@@ -117,19 +148,54 @@ export async function listFeed(
   const following = await prisma.follow.findMany({ where: { followerId: viewerId }, select: { followingId: true } });
   const authorIds = [viewerId, ...following.map((f) => f.followingId)];
 
-  const rows = await prisma.post.findMany({
-    where: {
-      userId: { in: authorIds },
-      ...(kind ? { kind: kind as PostKind } : {}),
-      ...buildCursorWhere(cursor),
+  const [postRows, repostRows] = await Promise.all([
+    prisma.post.findMany({
+      where: {
+        userId: { in: authorIds },
+        ...(kind ? { kind: kind as PostKind } : {}),
+        ...buildCursorWhere(cursor),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      include: VIEWER_STATE_INCLUDE(viewerId),
+    }),
+    prisma.repost.findMany({
+      where: {
+        userId: { in: authorIds },
+        ...(kind ? { post: { kind: kind as PostKind } } : {}),
+        ...buildCursorWhere(cursor),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      include: {
+        user: { select: { id: true, name: true, username: true, image: true } },
+        post: { include: VIEWER_STATE_INCLUDE(viewerId) },
+      },
+    }),
+  ]);
+
+  const postCandidates: FeedCandidate[] = postRows.map((row) => ({
+    createdAt: row.createdAt,
+    id: row.id,
+    item: { post: withViewerState(row), repost: null },
+  }));
+
+  const repostCandidates: FeedCandidate[] = repostRows.map((row) => ({
+    createdAt: row.createdAt,
+    id: row.id,
+    item: {
+      post: withViewerState(row.post),
+      repost: { id: row.id, comment: row.comment, createdAt: row.createdAt, repostedBy: row.user },
     },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    take: limit + 1,
-    include: VIEWER_STATE_INCLUDE(viewerId),
+  }));
+
+  const merged = [...postCandidates, ...repostCandidates].sort((a, b) => {
+    const byDate = b.createdAt.getTime() - a.createdAt.getTime();
+    return byDate !== 0 ? byDate : b.id.localeCompare(a.id);
   });
 
-  const page = toPage(rows, limit);
-  return { items: page.items.map(withViewerState), nextCursor: page.nextCursor };
+  const page = toPage(merged, limit);
+  return { items: page.items.map((c) => c.item), nextCursor: page.nextCursor };
 }
 
 export async function listUserPosts(

@@ -19,17 +19,43 @@ function logCloudinaryError(context: string, error: UploadApiErrorResponse) {
   console.error(`Cloudinary ${context} failed:`, error.message, hint);
 }
 
-function upload(buffer: Buffer, folder: string, resourceType: 'image' | 'auto'): Promise<string> {
+// Cloudinary's SDK default timeout (60s) is too tight for larger video/chat
+// attachments on a slow uplink, so it aborts with http_code 499 well before
+// the file finishes sending. 180s plus one retry covers a transient network
+// hiccup without masking a genuinely broken upload.
+const UPLOAD_TIMEOUT_MS = 180_000;
+const MAX_UPLOAD_ATTEMPTS = 2;
+
+function uploadOnce(buffer: Buffer, folder: string, resourceType: 'image' | 'auto'): Promise<string> {
   return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream({ folder, resource_type: resourceType }, (error, result) => {
-      if (error || !result) {
-        if (error) logCloudinaryError('upload', error);
-        return reject(error ?? new Error('Cloudinary upload failed'));
-      }
-      resolve(result.secure_url);
-    });
+    const stream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: resourceType, timeout: UPLOAD_TIMEOUT_MS },
+      (error, result) => {
+        if (error || !result) {
+          return reject(error ?? new Error('Cloudinary upload failed'));
+        }
+        resolve(result.secure_url);
+      },
+    );
     stream.end(buffer);
   });
+}
+
+async function upload(buffer: Buffer, folder: string, resourceType: 'image' | 'auto'): Promise<string> {
+  for (let attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS; attempt++) {
+    try {
+      return await uploadOnce(buffer, folder, resourceType);
+    } catch (error) {
+      const isTimeout = (error as UploadApiErrorResponse)?.http_code === 499;
+      const isLastAttempt = attempt === MAX_UPLOAD_ATTEMPTS;
+      if (!isTimeout || isLastAttempt) {
+        logCloudinaryError('upload', error as UploadApiErrorResponse);
+        throw error;
+      }
+      console.warn(`Cloudinary upload timed out, retrying (attempt ${attempt + 1}/${MAX_UPLOAD_ATTEMPTS})`);
+    }
+  }
+  throw new Error('Cloudinary upload failed');
 }
 
 export function uploadImage(buffer: Buffer, folder: string): Promise<string> {

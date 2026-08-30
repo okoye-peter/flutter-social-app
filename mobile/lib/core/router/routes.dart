@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/router/go_router_refresh_stream.dart';
 import 'package:social_app/core/widgets/home_screen.dart';
+import 'package:social_app/models/post_model.dart';
 import 'package:social_app/models/registration_draft.dart';
 import 'package:social_app/models/story_viewer_args.dart';
 import 'package:social_app/viewmodels/auth/auth_bloc.dart';
@@ -157,8 +158,14 @@ GoRouter buildRouter({
                   ),
                   GoRoute(
                     path: ':id',
-                    builder: (context, state) =>
-                        ViewReelDetailsScreen(reelId: state.pathParameters['id']!),
+                    builder: (context, state) => ViewReelDetailsScreen(
+                      reelId: state.pathParameters['id']!,
+                      // Set when pushed in-app from a feed that already has
+                      // the post loaded (skips the network round trip);
+                      // null when arriving via a deep link, so the screen
+                      // falls back to fetching by reelId.
+                      initialPost: state.extra as PostModel?,
+                    ),
                   ),
                 ],
               ),

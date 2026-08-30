@@ -44,9 +44,7 @@ class ReelUserProfile extends StatelessWidget {
               GestureDetector(
                 onTap: onTapProfile,
                 child: UserAvatar(
-                  source: avatarUrl.trim().isNotEmpty
-                      ? avatarUrl
-                      : (username.isNotEmpty ? username[0].toUpperCase() : '?'),
+                  source: avatarUrl,
                   radius: 24,
                 ),
               ),

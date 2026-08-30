@@ -114,9 +114,13 @@ class _StoryGroupPage extends StatefulWidget {
 
 class _StoryGroupPageState extends State<_StoryGroupPage>
     with TickerProviderStateMixin {
+  static const _videoLoadTimeout = Duration(seconds: 12);
+  static const _errorDisplayDuration = Duration(seconds: 2);
+
   late final AnimationController _controller;
   int _index = 0;
   VideoPlayerController? _videoController;
+  bool _hasError = false;
 
   // 0.0 = identity, 1.0 = fully dismissed.
   late final AnimationController _dismissController;
@@ -166,13 +170,15 @@ class _StoryGroupPageState extends State<_StoryGroupPage>
     _controller.reset();
     _videoController?.dispose();
     _videoController = null;
+    if (_hasError) setState(() => _hasError = false);
 
     if (story.mediaType == MediaType.video) {
       final controller = VideoPlayerController.networkUrl(Uri.parse(story.mediaUrl));
       try {
-        await controller.initialize();
+        await controller.initialize().timeout(_videoLoadTimeout);
       } catch (_) {
-        if (mounted) _goNext();
+        controller.dispose();
+        if (mounted) _handleLoadError();
         return;
       }
       if (!mounted) {
@@ -192,6 +198,17 @@ class _StoryGroupPageState extends State<_StoryGroupPage>
       _videoController?.play();
       _controller.forward(from: 0);
     }
+  }
+
+  // Surface the failure briefly instead of jump-cutting to the next story:
+  // the progress bar visibly fills over `_errorDisplayDuration` so the skip
+  // reads as "this one failed to load" rather than nothing happening.
+  void _handleLoadError() {
+    setState(() {
+      _hasError = true;
+      _controller.duration = _errorDisplayDuration;
+    });
+    if (widget.isActive) _controller.forward(from: 0);
   }
 
   void _pause() {
@@ -265,6 +282,25 @@ class _StoryGroupPageState extends State<_StoryGroupPage>
   }
 
   Widget _buildMedia(StoryModel story) {
+    if (_hasError) {
+      return const ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.wifi_off_rounded, color: Colors.white54, size: 40),
+              SizedBox(height: 12),
+              Text(
+                "Couldn't load story\nCheck your connection",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white54, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     if (story.mediaType == MediaType.video) {
       final controller = _videoController;
       return controller != null && controller.value.isInitialized
