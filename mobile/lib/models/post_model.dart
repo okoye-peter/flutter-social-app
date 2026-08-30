@@ -26,6 +26,9 @@ class PostModel extends Equatable {
   final String? soundId;
   final UserModel? user;
   final SoundModel? sound;
+  final bool likedByMe;
+  final bool bookmarkedByMe;
+  final bool repostedByMe;
 
   const PostModel({
     required this.id,
@@ -34,6 +37,9 @@ class PostModel extends Equatable {
     required this.mediaType,
     required this.createdAt,
     required this.updatedAt,
+    required this.likedByMe,
+    required this.bookmarkedByMe,
+    required this.repostedByMe,
     this.commentsCount = 0,
     this.likesCount = 0,
     this.repostsCount = 0,
@@ -64,6 +70,9 @@ class PostModel extends Equatable {
       'soundId': soundId,
       'user': user?.toJson(),
       'sound': sound?.toJson(),
+      'likedByMe': likedByMe,
+      'bookmarkedByMe': bookmarkedByMe,
+      'repostedByMe': repostedByMe
     };
   }
 
@@ -85,6 +94,53 @@ class PostModel extends Equatable {
       soundId: json['soundId'],
       user: json['user'] != null ? UserModel.fromJson(json['user']) : null,
       sound: json['sound'] != null ? SoundModel.fromJson(json['sound']) : null,
+      likedByMe: json['likedByMe'],
+      bookmarkedByMe: json['bookmarkedByMe'],
+      repostedByMe: json['repostedByMe']
+    );
+  }
+
+  PostModel copyWith({
+    String? id,
+    String? userId,
+    PostKind? kind,
+    MediaType? mediaType,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? commentsCount,
+    int? likesCount,
+    int? repostsCount,
+    int? bookmarksCount,
+    String? caption,
+    String? mediaUrl,
+    String? thumbnailUrl,
+    String? soundId,
+    UserModel? user,
+    SoundModel? sound,
+    bool? likedByMe,
+    bool? bookmarkedByMe,
+    bool? repostedByMe,
+  }) {
+    return PostModel(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      kind: kind ?? this.kind,
+      mediaType: mediaType ?? this.mediaType,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      commentsCount: commentsCount ?? this.commentsCount,
+      likesCount: likesCount ?? this.likesCount,
+      repostsCount: repostsCount ?? this.repostsCount,
+      bookmarksCount: bookmarksCount ?? this.bookmarksCount,
+      caption: caption ?? this.caption,
+      mediaUrl: mediaUrl ?? this.mediaUrl,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      soundId: soundId ?? this.soundId,
+      user: user ?? this.user,
+      sound: sound ?? this.sound,
+      likedByMe: likedByMe ?? this.likedByMe,
+      bookmarkedByMe: bookmarkedByMe ?? this.bookmarkedByMe,
+      repostedByMe: repostedByMe ?? this.repostedByMe,
     );
   }
 
@@ -106,5 +162,8 @@ class PostModel extends Equatable {
     soundId,
     user,
     sound,
+    likedByMe,
+    bookmarkedByMe,
+    repostedByMe
   ];
 }

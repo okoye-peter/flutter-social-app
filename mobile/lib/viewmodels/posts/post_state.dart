@@ -13,6 +13,18 @@ final class PostLoadingState extends PostState {
   const PostLoadingState();
 }
 
+final class PostLikeStatusUpdatingState extends PostState {
+  const PostLikeStatusUpdatingState();
+}
+
+final class PostBookMarkStatusUpdatingState extends PostState {
+  const PostBookMarkStatusUpdatingState();
+}
+
+final class PostRepostStatusUpdatingState extends PostState {
+  const PostRepostStatusUpdatingState();
+}
+
 final class PostCreatedState extends PostState {
   const PostCreatedState({required this.post});
 
@@ -24,17 +36,17 @@ final class PostCreatedState extends PostState {
 
 final class PostsLoadedState extends PostState {
   const PostsLoadedState({
-    required this.posts,
+    required this.items,
     required this.hasMorePage,
     required this.nextCursor,
   });
 
-  final List<PostModel> posts;
+  final List<FeedItemModel> items;
   final bool hasMorePage;
   final String? nextCursor;
 
   @override
-  List<Object?> get props => [posts, hasMorePage, nextCursor];
+  List<Object?> get props => [items, hasMorePage, nextCursor];
 }
 
 final class PostErrorState extends PostState {
@@ -48,15 +60,6 @@ final class PostErrorState extends PostState {
 
 final class PostDetailsLoadedState extends PostState {
   const PostDetailsLoadedState({required this.post});
-
-  final PostModel post;
-
-  @override
-  List<Object> get props => [post];
-}
-
-final class FetchPostDetails extends PostState {
-  const FetchPostDetails({required this.post});
 
   final PostModel post;
 

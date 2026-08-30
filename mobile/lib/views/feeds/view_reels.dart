@@ -8,7 +8,7 @@ import 'package:social_app/viewmodels/posts/post_bloc.dart';
 import 'package:social_app/views/feeds/widgets/reel_media_shimmer.dart';
 import 'package:social_app/views/feeds/widgets/reels_tile.dart';
 
-class ViewReelDetailsScreen extends StatefulWidget {
+class ViewReelDetailsScreen extends StatelessWidget {
   const ViewReelDetailsScreen({
     super.key,
     required this.reelId,
@@ -24,44 +24,34 @@ class ViewReelDetailsScreen extends StatefulWidget {
   final PostModel? initialPost;
 
   @override
-  State<ViewReelDetailsScreen> createState() => _ViewReelDetailsScreenState();
-}
-
-class _ViewReelDetailsScreenState extends State<ViewReelDetailsScreen> {
-  late final PostBloc _postBloc;
-
-  @override
-  void initState() {
-    super.initState();
-    _postBloc = PostBloc();
-    if (widget.initialPost == null) {
-      _postBloc.add(GetPostDetailsEvent(postId: widget.reelId));
-    }
-  }
-
-  @override
-  void dispose() {
-    _postBloc.close();
-    super.dispose();
-  }
-
-  void _retry() => _postBloc.add(GetPostDetailsEvent(postId: widget.reelId));
-
-  @override
   Widget build(BuildContext context) {
-    return BlocProvider.value(
-      value: _postBloc,
+    return BlocProvider(
+      create: (_) {
+        final bloc = PostBloc();
+        if (initialPost == null) {
+          bloc.add(GetPostDetailsEvent(postId: reelId));
+        }
+        return bloc;
+      },
       child: BlocBuilder<PostBloc, PostState>(
         builder: (context, state) {
+          // Prefer the bloc's own post once it has one: it's kept fresh by
+          // toggles (see _applyPost in PostBloc), whereas initialPost is a
+          // one-time snapshot passed in via the route's `extra`.
           final post =
-              widget.initialPost ??
-              (state is PostDetailsLoadedState ? state.post : null);
+              (state is PostDetailsLoadedState ? state.post : null) ??
+              initialPost;
 
           final Widget body;
           if (post != null) {
             body = _ReelDetails(post: post);
           } else if (state is PostErrorState) {
-            body = _ErrorView(message: state.message, onRetry: _retry);
+            body = _ErrorView(
+              message: state.message,
+              onRetry: () => context.read<PostBloc>().add(
+                GetPostDetailsEvent(postId: reelId),
+              ),
+            );
           } else {
             body = const ReelMediaShimmer();
           }
@@ -69,16 +59,14 @@ class _ViewReelDetailsScreenState extends State<ViewReelDetailsScreen> {
           return Scaffold(
             body: SafeArea(
               child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  SizedBox(
-                    height: MediaQuery.of(context).size.height,
-                    width: MediaQuery.of(context).size.width,
-                    child: body,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4, top: 4),
+                  Positioned.fill(child: body),
+                  Positioned(
+                    left: 4,
+                    top: 4,
                     child: IconButton(
-                      onPressed: () => context.pop(),
+                      onPressed: () => context.pop(post),
                       icon: const Icon(
                         CupertinoIcons.back,
                         size: 32,
@@ -107,13 +95,23 @@ class _ReelDetails extends StatelessWidget {
       mediaUrl: post.mediaUrl,
       mediaType: post.mediaType,
       mode: ReelInteractionMode.details,
-      avatarUrl: post.user?.image ?? '',
+      avatarUrl: post.user?.image ?? post.user?.getInitials ?? '?',
       username: post.user?.username ?? 'friend',
       caption: post.caption ?? '',
       soundTitle: post.sound?.title,
+      // ReelsTile asserts soundUrl is only passed for image/text posts —
+      // video posts play their own embedded audio track instead.
+      soundUrl: post.mediaType == MediaType.video ? null : post.sound?.audioUrl,
       likeCount: post.likesCount,
       repostCount: post.repostsCount,
       commentCount: post.commentsCount,
+      bookMarkCount: post.bookmarksCount,
+      likedByMe: post.likedByMe,
+      bookMarkedByMe: post.bookmarkedByMe,
+      repostedByMe: post.repostedByMe,
+      onTapLike: () => context.read<PostBloc>().toggleLike(post),
+      onTapBookMark: () => context.read<PostBloc>().toggleBookMark(post),
+      onTapRepost: () => context.read<PostBloc>().toggleRepost(post),
     );
   }
 }

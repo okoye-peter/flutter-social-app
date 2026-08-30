@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:social_app/core/di/service_locator.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/storage/user_cache.dart';
+import 'package:social_app/models/feed_item_model.dart';
 import 'package:social_app/models/post_model.dart';
 import 'package:social_app/models/story_model.dart';
 import 'package:social_app/models/story_viewer_args.dart';
@@ -45,6 +46,16 @@ class _FeedsScreenState extends State<FeedsScreen> {
     }
   }
 
+  Future<void> _openReelDetails(BuildContext context, PostModel post) async {
+    final updated = await context.push<PostModel>(
+      AppRoutes.feedDetailsPath(post.id),
+      extra: post,
+    );
+    if (updated != null && context.mounted) {
+      context.read<PostBloc>().add(SyncPostEvent(post: updated));
+    }
+  }
+
   void _openStoryViewer(
     BuildContext context,
     List<StoryGroupModel> storyGroups,
@@ -75,12 +86,14 @@ class _FeedsScreenState extends State<FeedsScreen> {
           final postState = context.watch<PostBloc>().state;
 
           final storyGroups = storyState is StoryLoadedState
-                              ? storyState.stories : const <StoryGroupModel>[];
+              ? storyState.stories
+              : const <StoryGroupModel>[];
 
-          final posts = postState is PostsLoadedState
-                              ? postState.posts : const <PostModel>[];
+          final items = postState is PostsLoadedState
+              ? postState.items
+              : const <FeedItemModel>[];
 
-          return _buildScaffold(context, storyGroups, posts, postState);
+          return _buildScaffold(context, storyGroups, items, postState);
         },
       ),
     );
@@ -89,7 +102,7 @@ class _FeedsScreenState extends State<FeedsScreen> {
   Widget _buildScaffold(
     BuildContext context,
     List<StoryGroupModel> storyGroups,
-    List<PostModel> posts,
+    List<FeedItemModel> items,
     PostState postState,
   ) {
     final theme = Theme.of(context);
@@ -230,16 +243,15 @@ class _FeedsScreenState extends State<FeedsScreen> {
                     Text(postState.message, textAlign: TextAlign.center),
                     const SizedBox(height: 12),
                     OutlinedButton(
-                      onPressed: () => context
-                          .read<PostBloc>()
-                          .add(const FetchPostsEvent()),
+                      onPressed: () =>
+                          context.read<PostBloc>().add(const FetchPostsEvent()),
                       child: const Text('Retry'),
                     ),
                   ],
                 ),
               ),
             )
-          else if (postState is PostLoadingState && posts.isEmpty)
+          else if (postState is PostLoadingState && items.isEmpty)
             SliverFixedExtentList(
               itemExtent: _reelCardHeight,
               delegate: SliverChildBuilderDelegate(
@@ -251,24 +263,34 @@ class _FeedsScreenState extends State<FeedsScreen> {
             SliverFixedExtentList(
               itemExtent: _reelCardHeight,
               delegate: SliverChildBuilderDelegate((_, int index) {
-                final post = posts[index];
+                final feedItem = items[index];
+                final post = feedItem.post;
+                final repost = feedItem.repost;
                 return ReelsTile(
                   mediaUrl: post.mediaUrl,
                   mediaType: post.mediaType,
                   mode: ReelInteractionMode.feed,
-                  avatarUrl: post.user?.image ?? '',
+                  avatarUrl: post.user?.image ?? post.user?.getInitials ?? '?',
                   username: post.user?.username ?? 'friend',
                   caption: post.caption ?? '',
                   soundTitle: post.sound?.title,
                   likeCount: post.likesCount,
                   repostCount: post.repostsCount,
                   commentCount: post.commentsCount,
-                  onTapReel: () => context.push(
-                    AppRoutes.feedDetailsPath(post.id),
-                    extra: post,
-                  ),
+                  bookMarkCount: post.bookmarksCount,
+                  likedByMe: post.likedByMe,
+                  bookMarkedByMe: post.bookmarkedByMe,
+                  repostedByMe: post.repostedByMe,
+                  repostedByUsername: repost?.repostedBy.username,
+                  repostComment: repost?.comment,
+                  onTapLike: () => context.read<PostBloc>().toggleLike(post),
+                  onTapBookMark: () =>
+                      context.read<PostBloc>().toggleBookMark(post),
+                  onTapRepost: () =>
+                      context.read<PostBloc>().toggleRepost(post),
+                  onTapReel: () => _openReelDetails(context, post),
                 );
-              }, childCount: posts.length),
+              }, childCount: items.length),
             ),
         ],
       ),

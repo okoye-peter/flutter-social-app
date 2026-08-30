@@ -17,8 +17,13 @@ export interface CreateStoryInput {
 
 export type StoryWithViewerState = Story & { seenByMe: boolean };
 
+// Scoped to just what the story feed's avatar/username need — narrower
+// than SafeUser, which still carries email/phoneNumber/fcmToken/etc. out
+// to every viewer of the feed, not just the story's own author.
+type StoryAuthor = { id: string; name: string; username: string; image: string };
+
 export interface StoryGroup {
-  user: SafeUser;
+  user: StoryAuthor;
   stories: StoryWithViewerState[];
   hasUnseen: boolean;
 }
@@ -55,7 +60,7 @@ export async function listStoriesFeed(viewerId: string): Promise<StoryGroup[]> {
     where: { userId: { in: authorIds }, expiresAt: { gt: new Date() } },
     orderBy: [{ createdAt: 'asc' }],
     include: {
-      user: true,
+      user: { select: { id: true, name: true, username: true, image: true } },
       views: { where: { viewerId }, select: { id: true } },
     },
   });
@@ -65,7 +70,7 @@ export async function listStoriesFeed(viewerId: string): Promise<StoryGroup[]> {
     const { user, views, ...story } = row;
     let group = groups.get(user.id);
     if (!group) {
-      group = { user: toSafeUser(user), stories: [], hasUnseen: false };
+      group = { user, stories: [], hasUnseen: false };
       groups.set(user.id, group);
     }
     const seenByMe = views.length > 0;
