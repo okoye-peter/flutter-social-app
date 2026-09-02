@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:social_app/core/di/service_locator.dart';
-import 'package:social_app/core/errors/app_exception.dart';
+import 'package:social_app/core/errors/dio_error_mapper.dart';
 import 'package:social_app/core/storage/user_cache.dart';
 import 'package:social_app/models/user_model.dart';
 
@@ -37,16 +37,7 @@ class UserRepository {
       await _userCache.save(updated);
       return updated;
     } on DioException catch (e) {
-      throw _mapError(e, 'Profile update failed');
+      throw e.toAppException('Profile update failed');
     }
-  }
-
-  AppException _mapError(DioException e, String fallback) {
-    final data = e.response?.data;
-    final message = data is Map ? data['error'] as String? : null;
-    return AppException(
-      message ?? fallback,
-      statusCode: e.response?.statusCode,
-    );
   }
 }

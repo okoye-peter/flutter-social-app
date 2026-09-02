@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:social_app/core/di/service_locator.dart';
-import 'package:social_app/core/errors/app_exception.dart';
+import 'package:social_app/core/errors/dio_error_mapper.dart';
 import 'package:social_app/models/sound_model.dart';
 
 class SoundRepository {
@@ -17,16 +17,7 @@ class SoundRepository {
           .map((item) => SoundModel.fromJson(item as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
-      throw _mapError(e, 'Failed to load sounds');
+      throw e.toAppException('Failed to load sounds');
     }
-  }
-
-  AppException _mapError(DioException e, String fallback) {
-    final data = e.response?.data;
-    final message = data is Map ? data['error'] as String? : null;
-    return AppException(
-      message ?? fallback,
-      statusCode: e.response?.statusCode,
-    );
   }
 }

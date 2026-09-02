@@ -3,12 +3,10 @@ import 'package:shimmer/shimmer.dart';
 
 /// Skeleton placeholder mirroring [ReelsTile]'s full-bleed media block
 /// plus its bottom avatar/caption overlay, shown while the feed's first
-/// page is still loading — sized to the feed's fixed reel card extent so
-/// there's no layout jump once real content arrives.
+/// page is still loading — fills whatever space its parent (a
+/// [PageView] page) gives it, same as [ReelsTile] itself.
 class FeedLoadingShimmer extends StatelessWidget {
-  const FeedLoadingShimmer({super.key, required this.cardHeight});
-
-  final double cardHeight;
+  const FeedLoadingShimmer({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -17,8 +15,7 @@ class FeedLoadingShimmer extends StatelessWidget {
     return Shimmer.fromColors(
       baseColor: theme.colorScheme.surfaceContainerHighest,
       highlightColor: theme.colorScheme.surface,
-      child: SizedBox(
-        height: cardHeight,
+      child: SizedBox.expand(
         child: Stack(
           fit: StackFit.expand,
           children: [

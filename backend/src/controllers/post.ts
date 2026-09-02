@@ -48,7 +48,7 @@ export async function deletePost(req: Request, res: Response) {
 
 export async function listComments(req: Request, res: Response) {
   const { cursor, limit } = req.query as { cursor?: string; limit?: string };
-  const page = await commentService.listComments((req.params.id as string), { cursor, limit });
+  const page = await commentService.listComments((req.params.id as string), req.userId!, { cursor, limit });
   res.json(page);
 }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:social_app/core/enums/app_enums.dart';
+import 'package:social_app/core/utils/formatters.dart';
 import 'package:social_app/core/widgets/user_avatar.dart';
 import 'package:social_app/models/story_model.dart';
 import 'package:social_app/views/feeds/widgets/reel_media_shimmer.dart';
@@ -449,7 +450,7 @@ class _StoryHeader extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            _timeAgo(createdAt),
+            timeAgo(createdAt),
             style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           IconButton(
@@ -460,12 +461,4 @@ class _StoryHeader extends StatelessWidget {
       ),
     );
   }
-}
-
-String _timeAgo(DateTime dateTime) {
-  final diff = DateTime.now().difference(dateTime);
-  if (diff.inMinutes < 1) return 'now';
-  if (diff.inHours < 1) return '${diff.inMinutes}m';
-  if (diff.inDays < 1) return '${diff.inHours}h';
-  return '${diff.inDays}d';
 }

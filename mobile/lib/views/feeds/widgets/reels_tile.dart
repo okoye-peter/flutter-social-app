@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:social_app/core/utils/formatters.dart';
 import 'package:social_app/core/widgets/user_avatar.dart';
+import 'package:social_app/views/feeds/widgets/comment_modal.dart';
 import 'package:social_app/views/feeds/widgets/image_background.dart';
 import 'package:social_app/views/feeds/widgets/reel_action.dart';
 import 'package:social_app/core/enums/app_enums.dart';
@@ -27,6 +28,7 @@ const _visibilityPlayThreshold = 0.6;
 class ReelsTile extends StatefulWidget {
   const ReelsTile({
     super.key,
+    required this.postId,
     this.mediaUrl,
     required this.mediaType,
     required this.mode,
@@ -45,7 +47,6 @@ class ReelsTile extends StatefulWidget {
     this.onTapProfile,
     this.onTapFollow,
     this.onTapLike,
-    this.onTapComment,
     this.onTapShare,
     this.onTapBookMark,
     this.onTapRepost,
@@ -63,6 +64,8 @@ class ReelsTile extends StatefulWidget {
          'video posts play their own embedded audio; pass soundUrl only '
          'for image/text posts',
        );
+
+  final String postId;
 
   /// Null for text posts; required for image/video posts.
   final String? mediaUrl;
@@ -93,7 +96,6 @@ class ReelsTile extends StatefulWidget {
   final VoidCallback? onTapProfile;
   final VoidCallback? onTapFollow;
   final Future<void> Function()? onTapLike;
-  final Future<void> Function()? onTapComment;
   final Future<void> Function()? onTapShare;
   final Future<void> Function()? onTapBookMark;
   final Future<void> Function()? onTapRepost;
@@ -130,6 +132,7 @@ class _ReelsTileState extends State<ReelsTile> {
   late int _bookMarkCount = widget.bookMarkCount;
   bool _isRepostSubmitting = false;
   late int _repostCount = widget.repostCount;
+  late int _commentCount = widget.commentCount;
   late bool _isFollowing = widget.isFollowing;
 
   /// Stable across rebuilds (unlike a key generated inline in build),
@@ -331,265 +334,279 @@ class _ReelsTileState extends State<ReelsTile> {
   Widget build(BuildContext context) {
     final controller = _controller;
     final theme = Theme.of(context);
+    // Feed mode renders this tile full-bleed with no ambient SafeArea
+    // (the collapsing header only reserves top space for the first
+    // reel), so top-anchored overlays must clear the status bar
+    // themselves. In details mode the parent already wraps this in a
+    // SafeArea, where this padding correctly reads as 0.
+    final topInset = MediaQuery.paddingOf(context).top;
 
     return VisibilityDetector(
       key: _visibilityKey,
       onVisibilityChanged: _handleVisibilityChanged,
-      child: GestureDetector(
-        onTap: _handleTap,
-        onDoubleTap: _handleDoubleTap,
-        child: SizedBox(
-          height: double.infinity,
-          width: double.infinity,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // reels content
-              _buildBackground(),
+      child: SizedBox(
+        height: double.infinity,
+        width: double.infinity,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Tap/double-tap live on the background layer only, as a
+            // Stack sibling of the overlay buttons below rather than
+            // their ancestor — an ancestor GestureDetector here would
+            // otherwise compete with (and can starve) a button's own
+            // tap in the gesture arena, since onDoubleTap forces every
+            // tap in its subtree to wait out the double-tap window.
+            GestureDetector(
+              onTap: _handleTap,
+              onDoubleTap: _handleDoubleTap,
+              behavior: HitTestBehavior.opaque,
+              child: _buildBackground(),
+            ),
 
-              if (_isVideo &&
-                  controller != null &&
-                  controller.value.isInitialized &&
-                  !controller.value.isPlaying)
-                const Center(
-                  child: Icon(
-                    Icons.play_arrow_rounded,
-                    size: 72,
-                    color: Colors.white70,
-                    shadows: reelTextShadow,
-                  ),
+            if (_isVideo &&
+                controller != null &&
+                controller.value.isInitialized &&
+                !controller.value.isPlaying)
+              const Center(
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  size: 72,
+                  color: Colors.white70,
+                  shadows: reelTextShadow,
                 ),
+              ),
 
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: 220,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.75),
-                        ],
-                      ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 220,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.75),
+                      ],
                     ),
                   ),
                 ),
               ),
+            ),
 
-              if (_hasAudio)
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: RoundIconButton(
-                    icon: _isMuted ? Icons.volume_off : Icons.volume_up,
-                    onTap: _toggleMute,
-                  ),
+            if (_hasAudio)
+              Positioned(
+                top: 12 + topInset,
+                right: 12,
+                child: RoundIconButton(
+                  icon: _isMuted ? Icons.volume_off : Icons.volume_up,
+                  onTap: _toggleMute,
                 ),
+              ),
 
-              if (widget.repostedByUsername != null)
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  right: 60,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            CupertinoIcons.repeat,
-                            size: 14,
-                            color: Colors.white,
-                            shadows: reelTextShadow,
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'Reposted by ${widget.repostedByUsername}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                                shadows: reelTextShadow,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (widget.repostComment != null &&
-                          widget.repostComment!.trim().isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+            if (widget.repostedByUsername != null)
+              Positioned(
+                top: 12 + topInset,
+                left: 12,
+                right: 60,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          CupertinoIcons.repeat,
+                          size: 14,
+                          color: Colors.white,
+                          shadows: reelTextShadow,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
                           child: Text(
-                            widget.repostComment!,
-                            maxLines: 3,
+                            'Reposted by ${widget.repostedByUsername}',
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Colors.white,
+                              fontWeight: FontWeight.w600,
                               fontSize: 13,
+                              shadows: reelTextShadow,
                             ),
                           ),
                         ),
                       ],
-                    ],
-                  ),
-                ),
-
-              Positioned(
-                right: 8,
-                bottom: 120,
-                child: Column(
-                  children: [
-                    // like
-                    _isLikeSubmitting
-                        ? const SizedBox(
-                            width: 30,
-                            height: 46,
-                            child: Center(
-                              child: SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.4,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          )
-                        : ReelAction(
-                            icon: _isLiked
-                                ? Icons.favorite
-                                : Icons.favorite_border,
-                            iconColor: _isLiked
-                                ? Colors.redAccent
-                                : Colors.white,
-                            label: formatCount(_likeCount),
-                            onTap: _toggleLike,
-                          ),
-                    const SizedBox(height: 18),
-                    // comment
-                    ReelAction(
-                      icon: CupertinoIcons.chat_bubble,
-                      label: formatCount(widget.commentCount),
-                      onTap: () => widget.onTapComment?.call(),
                     ),
-                    const SizedBox(height: 18),
-                    // share
-                    ReelAction(
-                      icon: CupertinoIcons.paperplane,
-                      label: formatCount(widget.shareCount),
-                      onTap: () => widget.onTapShare?.call(),
-                    ),
-                    const SizedBox(height: 18),
-                    // bookmark
-                    _isBookMarkSubmitting
-                        ? const SizedBox(
-                            width: 30,
-                            height: 46,
-                            child: Center(
-                              child: SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.4,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          )
-                        : ReelAction(
-                            icon: _isBookMarked
-                                ? CupertinoIcons.bookmark_fill
-                                : CupertinoIcons.bookmark,
-                            iconColor: _isBookMarked
-                                ? theme.colorScheme.onPrimaryContainer
-                                : Colors.white,
-                            label: formatCount(_bookMarkCount),
-                            onTap: _toggleBookMark,
-                          ),
-                    const SizedBox(height: 18),
-                    // repost
-                    _isRepostSubmitting
-                        ? const SizedBox(
-                            width: 30,
-                            height: 46,
-                            child: Center(
-                              child: SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.4,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          )
-                        : ReelAction(
-                            icon: _isReposted
-                                ? CupertinoIcons.arrow_2_squarepath
-                                : CupertinoIcons.repeat,
-                            iconColor: _isReposted
-                                ? theme.colorScheme.onSecondary
-                                : Colors.white,
-                            label: formatCount(_repostCount),
-                            onTap: _toggleRepost,
-                          ),
-                    const SizedBox(height: 18),
-
-                    GestureDetector(
-                      onTap: widget.onTapProfile,
-                      child: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
+                    if (widget.repostComment != null &&
+                        widget.repostComment!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
                         ),
-                        child: ClipOval(
-                          child: widget.avatarUrl.trim().isNotEmpty
-                              ? UserAvatar(source: widget.avatarUrl, radius: 20)
-                              : const ColoredBox(color: Colors.white24),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          widget.repostComment!,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
-              // reel user profile
-              Positioned(
-                left: 12,
-                right: 72,
-                bottom: 16,
-                child: ReelUserProfile(
-                  avatarUrl: widget.avatarUrl,
-                  username: widget.username,
-                  isFollowing: _isFollowing,
-                  mediaType: widget.mediaType,
-                  caption: widget.caption,
-                  soundTitle: widget.soundTitle,
-                  onTapProfile: widget.onTapProfile,
-                  onTapFollow: _toggleFollow,
-                ),
+
+            Positioned(
+              right: 8,
+              bottom: 120,
+              child: Column(
+                children: [
+                  // like
+                  _isLikeSubmitting
+                      ? const SizedBox(
+                          width: 30,
+                          height: 46,
+                          child: Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.4,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        )
+                      : ReelAction(
+                          icon: _isLiked
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          iconColor: _isLiked ? Colors.redAccent : Colors.white,
+                          label: formatCount(_likeCount),
+                          onTap: _toggleLike,
+                        ),
+                  const SizedBox(height: 18),
+                  // comment
+                  ReelAction(
+                    icon: CupertinoIcons.chat_bubble,
+                    label: formatCount(_commentCount),
+                    onTap: () => CommentBottomSheet.show(
+                      context,
+                      postId: widget.postId,
+                      onCommentPosted: () => setState(() => _commentCount++),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  // share
+                  ReelAction(
+                    icon: CupertinoIcons.paperplane,
+                    label: formatCount(widget.shareCount),
+                    onTap: () => widget.onTapShare?.call(),
+                  ),
+                  const SizedBox(height: 18),
+                  // bookmark
+                  _isBookMarkSubmitting
+                      ? const SizedBox(
+                          width: 30,
+                          height: 46,
+                          child: Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.4,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        )
+                      : ReelAction(
+                          icon: _isBookMarked
+                              ? CupertinoIcons.bookmark_fill
+                              : CupertinoIcons.bookmark,
+                          iconColor: _isBookMarked
+                              ? theme.colorScheme.onPrimaryContainer
+                              : Colors.white,
+                          label: formatCount(_bookMarkCount),
+                          onTap: _toggleBookMark,
+                        ),
+                  const SizedBox(height: 18),
+                  // repost
+                  _isRepostSubmitting
+                      ? const SizedBox(
+                          width: 30,
+                          height: 46,
+                          child: Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.4,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        )
+                      : ReelAction(
+                          icon: _isReposted
+                              ? CupertinoIcons.arrow_2_squarepath
+                              : CupertinoIcons.repeat,
+                          iconColor: _isReposted
+                              ? theme.colorScheme.onSecondary
+                              : Colors.white,
+                          label: formatCount(_repostCount),
+                          onTap: _toggleRepost,
+                        ),
+                  const SizedBox(height: 18),
+
+                  GestureDetector(
+                    onTap: widget.onTapProfile,
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: ClipOval(
+                        child: widget.avatarUrl.trim().isNotEmpty
+                            ? UserAvatar(source: widget.avatarUrl, radius: 20)
+                            : const ColoredBox(color: Colors.white24),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            // reel user profile
+            Positioned(
+              left: 12,
+              right: 72,
+              bottom: 16,
+              child: ReelUserProfile(
+                avatarUrl: widget.avatarUrl,
+                username: widget.username,
+                isFollowing: _isFollowing,
+                mediaType: widget.mediaType,
+                caption: widget.caption,
+                soundTitle: widget.soundTitle,
+                onTapProfile: widget.onTapProfile,
+                onTapFollow: _toggleFollow,
+              ),
+            ),
+          ],
         ),
       ),
     );

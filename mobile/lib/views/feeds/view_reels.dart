@@ -92,6 +92,7 @@ class _ReelDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ReelsTile(
+      postId: post.id,
       mediaUrl: post.mediaUrl,
       mediaType: post.mediaType,
       mode: ReelInteractionMode.details,

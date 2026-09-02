@@ -63,6 +63,12 @@ dependencies:
   just_audio: ^0.10.6
   visibility_detector: ^0.4.0+2
 
+dependency_overrides:
+  # video_player_android 2.12.1 regenerated Messages.kt with a Pigeon
+  # codegen bug that declares MessagesPigeonMethodCodec twice, breaking
+  # compileDebugKotlin. Pin to 2.12.0 until upstream ships a fix.
+  video_player_android: 2.12.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
