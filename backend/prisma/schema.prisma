@@ -64,6 +64,7 @@ model User {
   notifications          Notification[]       @relation("NotificationRecipient")
   triggeredNotifications Notification[]       @relation("NotificationActor")
   messageMentions        MessageMention[]
+  groupJoinRequests      GroupJoinRequest[]
 
   @@map("users")
 }
@@ -130,7 +131,7 @@ model Post {
   bookmarks      Bookmark[]
   notifications  Notification[]
   reports        Report[]
-  extractedSound Sound?          @relation("SoundSource")
+  extractedSound Sound?         @relation("SoundSource")
 
   @@index([userId, kind, createdAt])
   @@index([soundId])
@@ -205,7 +206,7 @@ model Comment {
   reports       Report[]
 
   @@index([postId, createdAt])
-  @@index([replyToId])
+  @@index([replyToId, createdAt])
   @@map("comments")
 }
 
@@ -249,14 +250,14 @@ model Bookmark {
 }
 
 model Story {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   mediaType MediaType @map("media_type")
-  mediaUrl  String   @map("media_url")
-  caption   String   @default("")
-  createdAt DateTime @default(now()) @map("created_at")
-  expiresAt DateTime @map("expires_at")
+  mediaUrl  String    @map("media_url")
+  caption   String    @default("")
+  createdAt DateTime  @default(now()) @map("created_at")
+  expiresAt DateTime  @map("expires_at")
 
   views StoryView[]
 
@@ -330,6 +331,7 @@ model Conversation {
   calls          Call[]
   pinnedMessages PinnedMessage[]
   notifications  Notification[]
+  joinRequests   GroupJoinRequest[]
 
   @@map("conversations")
 }
@@ -348,6 +350,27 @@ model ConversationMember {
   @@unique([conversationId, userId])
   @@index([userId])
   @@map("conversation_members")
+}
+
+enum JoinRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model GroupJoinRequest {
+  id             String            @id @default(cuid())
+  conversationId String            @map("conversation_id")
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String            @map("user_id")
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         JoinRequestStatus @default(PENDING)
+  createdAt      DateTime          @default(now()) @map("created_at")
+  respondedAt    DateTime?         @map("responded_at")
+
+  @@unique([conversationId, userId])
+  @@index([conversationId, status])
+  @@map("group_join_requests")
 }
 
 enum MessageType {
@@ -505,7 +528,8 @@ model Follow {
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@unique([followerId, followingId])
-  @@index([followingId])
+  @@index([followingId, createdAt])
+  @@index([followerId, createdAt])
   @@map("follows")
 }
 

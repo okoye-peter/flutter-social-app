@@ -1,22 +1,28 @@
 import { z } from 'zod';
+import { optionalString } from './shared.js';
 
+// userId isn't part of either body — both routes act on the authenticated
+// caller (req.userId), never a client-supplied id.
 export const registerTokenSchema = z
-  .object({ userId: z.string().optional(), token: z.string().optional() })
+  .object({ token: optionalString() })
   .superRefine((data, ctx) => {
-    if (!data.userId || !data.token) {
-      ctx.addIssue('userId and token are required');
+    if (!data.token) {
+      ctx.addIssue('token is required');
     }
   });
 
 export const sendNotificationSchema = z
   .object({
-    userId: z.string().optional(),
-    title: z.string().optional(),
-    body: z.string().optional(),
-    data: z.record(z.string(), z.string()).optional(),
+    title: optionalString(),
+    body: optionalString(),
+    data: z
+      .record(z.string(), z.string())
+      .optional()
+      .nullable()
+      .transform((value) => value ?? undefined),
   })
   .superRefine((data, ctx) => {
-    if (!data.userId || !data.title || !data.body) {
-      ctx.addIssue('userId, title and body are required');
+    if (!data.title || !data.body) {
+      ctx.addIssue('title and body are required');
     }
   });

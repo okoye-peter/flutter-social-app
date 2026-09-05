@@ -3,6 +3,7 @@ import { HttpError } from '../lib/http-error.js';
 import { isRecordNotFoundError, isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { decodeCursor, buildCursorWhere, toPage, parseLimit, type CursorPage } from '../lib/pagination.js';
 import { assertMembership } from './conversation.js';
+import { assertNotBlocked } from './block.js';
 import { uploadAttachment } from './cloudinary.js';
 import { toSafeUser, type SafeUser } from './auth.js';
 import { createNotification } from './notifications.js';
@@ -26,6 +27,21 @@ export interface SendMessageInput {
 export async function sendMessage(input: SendMessageInput): Promise<Message> {
   const { conversationId, senderId, content, file, replyToId, mentionedUserIds, durationSeconds } = input;
   await assertMembership(conversationId, senderId);
+
+  // Only enforced for DIRECT threads — an existing GROUP's ongoing
+  // membership isn't re-policed per message (mirrors addMembers, which is
+  // the actual gate for group membership/blocks).
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { type: true },
+  });
+  if (conversation?.type === 'DIRECT') {
+    const otherMember = await prisma.conversationMember.findFirst({
+      where: { conversationId, userId: { not: senderId } },
+      select: { userId: true },
+    });
+    if (otherMember) await assertNotBlocked(otherMember.userId, senderId);
+  }
 
   // type, content, and durationSeconds are already resolved/validated by
   // checkSendMessageFile (content is already trimmed) — this only derives

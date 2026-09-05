@@ -12,6 +12,8 @@ import { commentsRouter } from './routes/comments.js';
 import { conversationsRouter } from './routes/conversations.js';
 import { messagesRouter } from './routes/messages.js';
 import { reportsRouter } from './routes/reports.js';
+import { shareRouter } from './routes/share.js';
+import { wellKnownRouter } from './routes/well-known.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { initRealtime } from './realtime/index.js';
 
@@ -29,6 +31,8 @@ app.use('/api/comments', commentsRouter);
 app.use('/api/conversations', conversationsRouter);
 app.use('/api/messages', messagesRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/share', shareRouter);
+app.use('/.well-known', wellKnownRouter);
 
 app.use(errorHandler);
 

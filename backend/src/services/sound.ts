@@ -1,5 +1,6 @@
 import { prisma } from '../prisma.js';
 import { HttpError } from '../lib/http-error.js';
+import { isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { decodeCursor, buildCursorWhere, toPage, parseLimit, type CursorPage } from '../lib/pagination.js';
 import type { Sound } from '../../generated/prisma/index.js';
 
@@ -25,14 +26,23 @@ export async function getOrCreateSoundForPost(postId: string): Promise<Sound> {
 
   const title = post.caption.trim() || `${post.user.name} · original audio`;
 
-  return prisma.sound.create({
-    data: {
-      sourcePostId: post.id,
-      creatorId: post.userId,
-      title: title.slice(0, MAX_TITLE_LENGTH),
-      audioUrl: post.mediaUrl,
-    },
-  });
+  try {
+    return await prisma.sound.create({
+      data: {
+        sourcePostId: post.id,
+        creatorId: post.userId,
+        title: title.slice(0, MAX_TITLE_LENGTH),
+        audioUrl: post.mediaUrl,
+      },
+    });
+  } catch (e) {
+    if (isUniqueConstraintError(e)) {
+      // Lost a create race against a concurrent call for the same post —
+      // sourcePostId is unique, so the winner's row already exists.
+      return await prisma.sound.findUniqueOrThrow({ where: { sourcePostId: postId } });
+    }
+    throw e;
+  }
 }
 
 export async function getSound(soundId: string): Promise<Sound> {

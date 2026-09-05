@@ -2,9 +2,10 @@ import type { Request } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../lib/http-error.js';
 import { MAX_CAPTION_LENGTH } from '../services/story.js';
+import { optionalString } from './shared.js';
 
 export const createStorySchema = z
-  .object({ caption: z.string().optional() })
+  .object({ caption: optionalString() })
   .superRefine((data, ctx) => {
     const trimmedCaption = data.caption?.trim() ?? '';
     if (trimmedCaption.length > MAX_CAPTION_LENGTH) {

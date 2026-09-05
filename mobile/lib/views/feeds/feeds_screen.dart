@@ -161,6 +161,20 @@ class _FeedsScreenState extends State<FeedsScreen> {
         controller: _reelsController,
         scrollDirection: Axis.vertical,
         itemCount: isLoading ? 2 : items.length,
+        onPageChanged: (index) {
+          // FetchMovePostsEvent was previously never dispatched anywhere,
+          // so the feed could never load past its first page — droppable()
+          // on the bloc already guards against firing this again while a
+          // fetch is still in flight.
+          if (postState is! PostsLoadedState || !postState.hasMorePage) {
+            return;
+          }
+          if (index >= items.length - 2) {
+            context.read<PostBloc>().add(
+              FetchMovePostsEvent(cursor: postState.nextCursor!),
+            );
+          }
+        },
         itemBuilder: (_, int index) {
           if (isLoading) return const FeedLoadingShimmer();
 
@@ -190,6 +204,12 @@ class _FeedsScreenState extends State<FeedsScreen> {
             onTapBookMark: () => context.read<PostBloc>().toggleBookMark(post),
             onTapRepost: () => context.read<PostBloc>().toggleRepost(post),
             onTapReel: () => _openReelDetails(context, post),
+            onTapProfile: post.user != null
+                ? () => context.push(
+                    AppRoutes.profilePath(post.user!.id),
+                    extra: post.user,
+                  )
+                : null,
           );
         },
       );

@@ -16,6 +16,11 @@ class UserModel extends Equatable {
   final List<String> friendsIds;
   final List<String> friendRequestsIds;
   final List<String> sentFriendRequestsIds;
+  final bool isFollowedByMe;
+  final bool followsMe;
+  final int followersCount;
+  final int followingCount;
+  final int postsCount;
 
   const UserModel({
     required this.id,
@@ -32,6 +37,11 @@ class UserModel extends Equatable {
     required this.friendsIds,
     required this.friendRequestsIds,
     required this.sentFriendRequestsIds,
+    this.isFollowedByMe = false,
+    this.followsMe = false,
+    this.followersCount = 0,
+    this.followingCount = 0,
+    this.postsCount = 0,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -52,6 +62,11 @@ class UserModel extends Equatable {
       sentFriendRequestsIds: List<String>.from(
         json['sentFriendRequestsIds'] ?? [],
       ),
+      isFollowedByMe: json['isFollowedByMe'] ?? false,
+      followsMe: json['followsMe'] ?? false,
+      followersCount: json['followersCount'] ?? 0,
+      followingCount: json['followingCount'] ?? 0,
+      postsCount: json['postsCount'] ?? 0,
     );
   }
 
@@ -71,6 +86,11 @@ class UserModel extends Equatable {
       'friendsIds': friendsIds,
       'friendRequestsIds': friendRequestsIds,
       'sentFriendRequestsIds': sentFriendRequestsIds,
+      'isFollowedByMe': isFollowedByMe,
+      'followsMe': followsMe,
+      'followersCount': followersCount,
+      'followingCount': followingCount,
+      'postsCount': postsCount,
     };
   }
 
@@ -89,6 +109,11 @@ class UserModel extends Equatable {
     List<String>? newFriendsIds,
     List<String>? newFriendRequestsIds,
     List<String>? newSentFriendRequestsIds,
+    bool? newIsFollowedByMe,
+    bool? newFollowsMe,
+    int? newFollowersCount,
+    int? newFollowingCount,
+    int? newPostsCount,
   }) {
     return UserModel(
       id: newId ?? id,
@@ -105,6 +130,11 @@ class UserModel extends Equatable {
       friendsIds: newFriendsIds ?? friendsIds,
       friendRequestsIds: newFriendRequestsIds ?? friendRequestsIds,
       sentFriendRequestsIds: newSentFriendRequestsIds ?? sentFriendRequestsIds,
+      isFollowedByMe: newIsFollowedByMe ?? isFollowedByMe,
+      followsMe: newFollowsMe ?? followsMe,
+      followersCount: newFollowersCount ?? followersCount,
+      followingCount: newFollowingCount ?? followingCount,
+      postsCount: newPostsCount ?? postsCount,
     );
   }
 
@@ -124,6 +154,11 @@ class UserModel extends Equatable {
     friendsIds,
     friendRequestsIds,
     sentFriendRequestsIds,
+    isFollowedByMe,
+    followsMe,
+    followersCount,
+    followingCount,
+    postsCount,
   ];
 
   String get getInitials {

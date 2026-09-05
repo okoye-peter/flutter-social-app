@@ -17,8 +17,18 @@ export async function markMessagesRead(
   });
   if (!target) throw new HttpError(404, 'Message not found');
 
+  // Only the messages this user hasn't already marked read — on a chat
+  // marked read incrementally (the common case), that's just whatever's
+  // new since last time, not the whole conversation history re-fetched
+  // into memory on every call.
   const rows = await prisma.message.findMany({
-    where: { conversationId, createdAt: { lte: target.createdAt }, senderId: { not: userId }, deletedAt: null },
+    where: {
+      conversationId,
+      createdAt: { lte: target.createdAt },
+      senderId: { not: userId },
+      deletedAt: null,
+      reads: { none: { userId } },
+    },
     select: { id: true },
   });
 

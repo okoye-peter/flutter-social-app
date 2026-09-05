@@ -39,20 +39,18 @@ class NotificationService {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   }
 
-  Future<void> registerToken(String userId) async {
+  Future<void> registerToken() async {
     final token = await _messaging.getToken();
-    if (token != null) await _sendTokenToBackend(userId, token);
-    _messaging.onTokenRefresh.listen(
-      (token) => _sendTokenToBackend(userId, token),
-    );
+    if (token != null) await _sendTokenToBackend(token);
+    _messaging.onTokenRefresh.listen(_sendTokenToBackend);
   }
 
-  Future<void> _sendTokenToBackend(String userId, String token) async {
+  Future<void> _sendTokenToBackend(String token) async {
     try {
-      await _dio.post(
-        '/api/notifications/register-token',
-        data: {'userId': userId, 'token': token},
-      );
+      // Bare path: the Dio client's baseUrl already includes /api, so a
+      // leading '/api/...' here previously resolved to .../api/api/...
+      // and 404'd on every attempt.
+      await _dio.post('/notifications/register-token', data: {'token': token});
     } on DioException catch (e) {
       if (kDebugMode) debugPrint('Failed to register FCM token: $e');
     }

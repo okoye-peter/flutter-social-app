@@ -4,7 +4,8 @@ import { isUniqueConstraintError, isRecordNotFoundError } from '../lib/prisma-er
 import { decodeCursor, buildCursorWhere, toPage, parseLimit, type CursorPage } from '../lib/pagination.js';
 import { assertNotBlocked } from './block.js';
 import { createNotification } from './notifications.js';
-import type { Repost, Post } from '../../generated/prisma/index.js';
+import { VIEWER_STATE_INCLUDE, withViewerState, type PostWithViewerState } from './post-view-state.js';
+import type { Repost } from '../../generated/prisma/index.js';
 
 export async function repost(
   postId: string,
@@ -54,8 +55,11 @@ export async function unrepost(postId: string, userId: string): Promise<{ repost
 
 export async function listReposts(
   userId: string,
+  viewerId: string,
   query: { cursor?: string; limit?: string },
-): Promise<CursorPage<Post>> {
+): Promise<CursorPage<PostWithViewerState>> {
+  await assertNotBlocked(userId, viewerId);
+
   const limit = parseLimit(query.limit);
   const cursor = decodeCursor(query.cursor);
 
@@ -63,9 +67,9 @@ export async function listReposts(
     where: { userId, ...buildCursorWhere(cursor) },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
-    include: { post: true },
+    include: { post: { include: VIEWER_STATE_INCLUDE(viewerId) } },
   });
 
   const page = toPage(rows, limit);
-  return { items: page.items.map((row) => row.post), nextCursor: page.nextCursor };
+  return { items: page.items.map((row) => withViewerState(row.post)), nextCursor: page.nextCursor };
 }

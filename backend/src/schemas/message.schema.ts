@@ -4,18 +4,18 @@ import { HttpError } from '../lib/http-error.js';
 import { MessageType } from '../../generated/prisma/index.js';
 import { MAX_CONTENT_LENGTH } from '../services/message.js';
 import { MAX_EMOJI_LENGTH } from '../services/reaction.js';
-import { optionalJsonStringArray } from './shared.js';
+import { optionalJsonStringArray, optionalString } from './shared.js';
 
 // SYSTEM is deliberately excluded — those are only ever created internally
 // (see conversation.ts's postSystemMessage), never client-submitted.
 const VALID_TYPES = Object.values(MessageType).filter((type) => type !== 'SYSTEM');
 
 export const sendMessageSchema = z.object({
-  type: z.string().optional(),
-  content: z.string().optional(),
-  replyToId: z.string().optional(),
+  type: optionalString(),
+  content: optionalString(),
+  replyToId: optionalString(),
   mentionedUserIds: optionalJsonStringArray('mentionedUserIds'),
-  durationSeconds: z.string().optional(),
+  durationSeconds: optionalString(),
 });
 
 export type SendMessageData = z.infer<typeof sendMessageSchema>;
@@ -68,7 +68,7 @@ export function checkSendMessageFile(req: Request, data: SendMessageData) {
 }
 
 export const reactToMessageSchema = z
-  .object({ emoji: z.string().optional() })
+  .object({ emoji: optionalString() })
   .superRefine((data, ctx) => {
     if (!data.emoji || !data.emoji.trim()) {
       ctx.addIssue('emoji is required');

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { optionalString } from './shared.js';
 import {
   isValidEmail,
   isValidName,
@@ -9,11 +10,11 @@ import {
 
 export const registerSchema = z
   .object({
-    name: z.string().optional(),
-    username: z.string().optional(),
-    email: z.string().optional(),
-    phoneNumber: z.string().optional(),
-    password: z.string().optional(),
+    name: optionalString(),
+    username: optionalString(),
+    email: optionalString(),
+    phoneNumber: optionalString(),
+    password: optionalString(),
   })
   .superRefine((data, ctx) => {
     const { name, username, email, phoneNumber, password } = data;
@@ -43,7 +44,7 @@ export const registerSchema = z
   });
 
 export const loginSchema = z
-  .object({ email: z.string().optional(), password: z.string().optional() })
+  .object({ email: optionalString(), password: optionalString() })
   .superRefine((data, ctx) => {
     if (!data.email || !data.password) {
       ctx.addIssue('email and password are required');
@@ -51,7 +52,7 @@ export const loginSchema = z
   });
 
 export const refreshSchema = z
-  .object({ refreshToken: z.string().optional() })
+  .object({ refreshToken: optionalString() })
   .superRefine((data, ctx) => {
     if (!data.refreshToken) {
       ctx.addIssue('refreshToken is required');
@@ -59,7 +60,7 @@ export const refreshSchema = z
   });
 
 export const forgotPasswordSchema = z
-  .object({ email: z.string().optional() })
+  .object({ email: optionalString() })
   .superRefine((data, ctx) => {
     if (!data.email || !isValidEmail(data.email)) {
       ctx.addIssue('Enter a valid email');
@@ -67,7 +68,7 @@ export const forgotPasswordSchema = z
   });
 
 export const resetPasswordSchema = z
-  .object({ token: z.string().optional(), newPassword: z.string().optional() })
+  .object({ token: optionalString(), newPassword: optionalString() })
   .superRefine((data, ctx) => {
     if (!data.token || !data.newPassword) {
       ctx.addIssue('token and newPassword are required');
@@ -79,25 +80,25 @@ export const resetPasswordSchema = z
   });
 
 export const sendEmailOtpSchema = z
-  .object({ email: z.string().optional() })
+  .object({ email: optionalString() })
   .superRefine((data, ctx) => {
     if (!data.email) ctx.addIssue('email is required');
   });
 
 export const verifyEmailOtpSchema = z
-  .object({ email: z.string().optional(), code: z.string().optional() })
+  .object({ email: optionalString(), code: optionalString() })
   .superRefine((data, ctx) => {
     if (!data.email) ctx.addIssue('email is required');
   });
 
 export const sendPhoneOtpSchema = z
-  .object({ phoneNumber: z.string().optional() })
+  .object({ phoneNumber: optionalString() })
   .superRefine((data, ctx) => {
     if (!data.phoneNumber) ctx.addIssue('phoneNumber is required');
   });
 
 export const verifyPhoneOtpSchema = z
-  .object({ phoneNumber: z.string().optional(), code: z.string().optional() })
+  .object({ phoneNumber: optionalString(), code: optionalString() })
   .superRefine((data, ctx) => {
     if (!data.phoneNumber) ctx.addIssue('phoneNumber is required');
   });

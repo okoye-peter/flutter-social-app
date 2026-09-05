@@ -1,10 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:social_app/core/di/service_locator.dart';
-import 'package:social_app/core/storage/user_cache.dart';
-import 'package:social_app/core/widgets/user_avatar.dart';
-import 'package:social_app/models/user_model.dart';
+import 'package:social_app/core/router/app_routes.dart';
+import 'package:social_app/viewmodels/user_search/user_search_bloc.dart';
+import 'package:social_app/views/feeds/widgets/user_search_card.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -15,84 +17,125 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final UserSearchBloc _searchBloc = UserSearchBloc();
+
+  Timer? _debounce;
+
+  void _onSearchChanged(String query) {
+    _debounce?.cancel(); // cancel whatever was pending
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      // this only runs if 400ms pass with no new keystroke
+      _searchBloc.add(UserSearchQueryChanged(query));
+    });
+  }
 
   @override
   void dispose() {
+    _debounce
+        ?.cancel(); // don't let a pending timer fire after the widget is gone
     _searchController.dispose();
+    _searchBloc.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final UserModel? user = getIt<UserCache>().current;
     final isDarkMode = theme.brightness == Brightness.dark;
 
-    final List<UserModel> data = [];
-
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          onPressed: () => context.pop(),
-          icon: Icon(CupertinoIcons.back, size: 28),
-        ),
-        title: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            //   border: isDarkMode ? Border.all(color: Color.fromARGB(122, 227, 227, 227)) : null,
-            color: isDarkMode
-                ? theme.secondaryHeaderColor.withAlpha(125)
-                : Color.fromARGB(122, 227, 227, 227),
+    return BlocProvider.value(
+      value: _searchBloc,
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            onPressed: () => context.pop(),
+            icon: Icon(CupertinoIcons.back, size: 28),
           ),
-          child: Row(
-            children: [
-              Icon(Icons.search, size: 20, color: Colors.grey),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  autofocus: true,
-                  controller: _searchController,
-                  textInputAction: TextInputAction.search,
-                  onChanged: (String searchString) {},
-                  keyboardType: TextInputType.text,
-                  showCursor: true,
-                  onSubmitted: (String searchString) {},
-                  decoration: const InputDecoration(
-                    hintText: 'Search...',
-                    border: InputBorder.none,
-                    isDense: true,
+          title: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              //   border: isDarkMode ? Border.all(color: Color.fromARGB(122, 227, 227, 227)) : null,
+              color: isDarkMode
+                  ? theme.secondaryHeaderColor.withAlpha(125)
+                  : Color.fromARGB(122, 227, 227, 227),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.search, size: 20, color: Colors.grey),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    autofocus: true,
+                    controller: _searchController,
+                    textInputAction: TextInputAction.search,
+                    onChanged: _onSearchChanged,
+                    keyboardType: TextInputType.text,
+                    showCursor: true,
+                    onSubmitted: (String searchString) {},
+                    decoration: const InputDecoration(
+                      hintText: 'Search...',
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-      body: SafeArea(
-        child: _searchController.text.trim().length > 3
-            ? ListView.separated(
-                itemBuilder: (_, int index) {
-                  final result = data[index];
-                  return InkWell(
-                    onTap: () {},
-                    child: Row(
-                      children: [
-                        UserAvatar(
-                          source: result.image.trim().isNotEmpty
-                              ? result.image
-                              : result.getInitials,
-                          radius: 24,
-                        ),
-                      ],
+        body: SafeArea(
+          child: BlocBuilder<UserSearchBloc, UserSearchState>(
+            builder: (context, state) {
+              if (state is UserSearchLoadingState) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (state is UserSearchErrorState) {
+                return Center(
+                  child: Text(
+                    state.message,
+                    style: TextStyle(color: theme.colorScheme.error),
+                  ),
+                );
+              }
+              if (state is UserSearchLoadedState) {
+                if (state.users.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No results found',
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   );
-                },
-                separatorBuilder: (_, index) => const SizedBox(height: 15),
-                itemCount: data.length,
-              )
-            : _SearchEmptyState(colorScheme: theme.colorScheme),
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  itemBuilder: (_, int index) {
+                    final result = state.users[index];
+                    return UserSearchCard(
+                      name: result.name,
+                      username: result.username,
+                      imageUrl: result.image,
+                      followersCount: result.followersCount,
+                      isFollowing: result.isFollowedByMe,
+                      onTap: () => context.push(
+                        AppRoutes.profilePath(result.id),
+                        extra: result,
+                      ),
+                      onFollowToggle: () =>
+                          _searchBloc.add(UserSearchFollowToggled(result)),
+                    );
+                  },
+                  separatorBuilder: (_, index) => const SizedBox(height: 4),
+                  itemCount: state.users.length,
+                );
+              }
+              return _SearchEmptyState(colorScheme: theme.colorScheme);
+            },
+          ),
+        ),
       ),
     );
   }

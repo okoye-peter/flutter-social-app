@@ -1,15 +1,16 @@
 import { z } from 'zod';
+import { optionalString } from './shared.js';
 import { ReportReason } from '../../generated/prisma/index.js';
 
 const REASONS = Object.values(ReportReason);
 
 export const createReportSchema = z
   .object({
-    reason: z.string().optional(),
-    details: z.string().optional(),
-    postId: z.string().optional(),
-    commentId: z.string().optional(),
-    reportedUserId: z.string().optional(),
+    reason: optionalString(),
+    details: optionalString(),
+    postId: optionalString(),
+    commentId: optionalString(),
+    reportedUserId: optionalString(),
   })
   .superRefine((data, ctx) => {
     if (!data.reason || !REASONS.includes(data.reason as (typeof REASONS)[number])) {

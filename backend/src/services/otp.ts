@@ -80,8 +80,11 @@ export async function verifyOtp(identifier: string, channel: OtpChannel, code: s
 /// used to gate account creation on the mobile app's verification steps
 /// actually having happened.
 export async function assertVerified(identifier: string, channel: OtpChannel): Promise<void> {
+  // Also enforces the same TTL verifyOtp checks — otherwise a verified
+  // (but never consumed by a completed registration) row stays valid to
+  // gate account creation indefinitely.
   const verified = await prisma.otp.findFirst({
-    where: { identifier, channel, verifiedAt: { not: null } },
+    where: { identifier, channel, verifiedAt: { not: null }, expiresAt: { gt: new Date() } },
   });
 
   if (!verified) {

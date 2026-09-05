@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:social_app/core/router/app_extra_codec.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/router/go_router_refresh_stream.dart';
 import 'package:social_app/core/widgets/home_screen.dart';
 import 'package:social_app/models/post_model.dart';
 import 'package:social_app/models/registration_draft.dart';
 import 'package:social_app/models/story_viewer_args.dart';
+import 'package:social_app/models/user_model.dart';
 import 'package:social_app/viewmodels/auth/auth_bloc.dart';
 import 'package:social_app/views/auth/email_veritication_screen.dart';
 import 'package:social_app/views/auth/forgot_password_screen.dart';
@@ -24,10 +26,11 @@ import 'package:social_app/views/feeds/view_reels.dart';
 import 'package:social_app/views/groups/groups_screen.dart';
 import 'package:social_app/views/onboarding/onboarding_screen.dart';
 import 'package:social_app/views/settings/setting_screen.dart';
+import 'package:social_app/views/users/profile_screen.dart';
 
 GoRouter buildRouter({
   required AuthBloc authBloc,
-  required bool hasSeenOnboarding
+  required bool hasSeenOnboarding,
 }) {
   const authFlowRoutes = {
     AppRoutes.login,
@@ -41,6 +44,7 @@ GoRouter buildRouter({
 
   return GoRouter(
     initialLocation: AppRoutes.onboarding,
+    extraCodec: const AppExtraCodec(),
     refreshListenable: GoRouterRefreshStream(authBloc.stream),
     redirect: (context, state) {
       final loc = state.matchedLocation;
@@ -51,15 +55,41 @@ GoRouter buildRouter({
         return loggedIn ? AppRoutes.feeds : AppRoutes.login;
       }
 
+      // A fresh install must see onboarding first, however it was
+      // opened — including via a deep link (e.g. a shared post) rather
+      // than the launcher icon.
+      if (!hasSeenOnboarding) return AppRoutes.onboarding;
+
       final isAuthFlow = authFlowRoutes.contains(loc);
-      if (!loggedIn && !isAuthFlow) return AppRoutes.login;
-      if (loggedIn && isAuthFlow) return AppRoutes.feeds;
+      if (!loggedIn && !isAuthFlow) {
+        // Preserve where the user was headed (e.g. a shared post's deep
+        // link) so login can return them there instead of the default
+        // feed — see LoginScreen's use of this same query param.
+        return '${AppRoutes.login}?redirect=${Uri.encodeComponent(state.uri.toString())}';
+      }
+      if (loggedIn && isAuthFlow) {
+        final redirectTo = state.uri.queryParameters['redirect'];
+        return redirectTo != null && redirectTo.isNotEmpty
+            ? redirectTo
+            : AppRoutes.feeds;
+      }
       return null;
     },
     routes: [
       GoRoute(
         path: AppRoutes.onboarding,
         builder: (context, state) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        // Public entry point for a shared post's App/Universal Link (see
+        // the backend's /share/posts/:id preview page) — maps it to the
+        // same in-app details route a normal in-app tap would use. A
+        // logged-out visitor is caught by the auth gate above first (its
+        // `redirect` query param brings them back here after login, and
+        // this redirect resolves the same way on that second pass).
+        path: '/share/posts/:id',
+        redirect: (context, state) =>
+            AppRoutes.feedDetailsPath(state.pathParameters['id']!),
       ),
       GoRoute(
         path: AppRoutes.login,
@@ -97,7 +127,7 @@ GoRouter buildRouter({
         builder: (context, state, navigationShell) => HomeScaffold(
           navigationShell: navigationShell,
           currentFullPath: state.fullPath,
-        ),    
+        ),
         branches: [
           StatefulShellBranch(
             routes: [
@@ -111,6 +141,13 @@ GoRouter buildRouter({
                   GoRoute(
                     path: 'search',
                     builder: (context, state) => const SearchScreen(),
+                  ),
+                  GoRoute(
+                    path: 'profile/:id',
+                    builder: (context, state) => ProfileScreen(
+                      userId: state.pathParameters['id']!,
+                      initialUser: state.extra as UserModel?,
+                    ),
                   ),
                   GoRoute(
                     path: 'create',

@@ -18,6 +18,8 @@ class ProfileHeader extends StatelessWidget {
     required this.followerCount,
     required this.followingCount,
     required this.isOwnProfile,
+    required this.isFollowedByMe,
+    required this.onFollowToggle,
   });
 
   final ColorScheme colorScheme;
@@ -30,6 +32,8 @@ class ProfileHeader extends StatelessWidget {
   final String followerCount;
   final String followingCount;
   final bool isOwnProfile;
+  final bool isFollowedByMe;
+  final VoidCallback onFollowToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +101,10 @@ class ProfileHeader extends StatelessWidget {
                         colorScheme: colorScheme,
                         onTap: () {},
                       )
-                    : _FilledActionButton(label: 'Follow', onTap: () {}),
+                    : _FilledActionButton(
+                        label: isFollowedByMe ? 'Following' : 'Follow',
+                        onTap: onFollowToggle,
+                      ),
               ),
               const SizedBox(width: 10),
               Expanded(

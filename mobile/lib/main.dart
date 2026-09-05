@@ -26,6 +26,14 @@ void main() async {
   if (getIt<TokenStorage>().current != null) {
     authBloc.add(FetchAuthenticatedUserEvent());
   }
+  // Was previously never called at all, so no device ever registered an
+  // FCM token with the backend regardless of the request path bug fixed
+  // alongside this — covers both a fresh login and a restored session.
+  authBloc.stream.listen((state) {
+    if (state is AuthLoadedState) {
+      getIt<NotificationService>().registerToken();
+    }
+  });
 
   final router = buildRouter(authBloc: authBloc, hasSeenOnboarding: hasSeenOnboarding);
 

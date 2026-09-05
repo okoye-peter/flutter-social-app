@@ -15,8 +15,9 @@ usersRouter.put(
   userController.updateProfile,
 );
 
-// Must be registered before '/:id' — otherwise Express matches 'blocked' as the :id param.
+// Must be registered before '/:id' — otherwise Express matches 'blocked'/'search' as the :id param.
 usersRouter.get('/blocked', requireAuth, userController.listBlocked);
+usersRouter.get('/search', requireAuth, userController.searchUsers);
 
 usersRouter.get('/:id', requireAuth, userController.getProfile);
 usersRouter.get('/:id/posts', requireAuth, userController.listUserPosts);

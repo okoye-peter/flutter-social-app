@@ -41,7 +41,7 @@ export interface LoginInput {
   password: string;
 }
 
-export function toSafeUser(user: User): SafeUser {
+export function toSafeUser(user: SafeUser & { password?: unknown }): SafeUser {
   const { password: _password, ...safeUser } = user;
   return safeUser;
 }

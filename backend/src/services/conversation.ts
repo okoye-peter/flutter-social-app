@@ -1,6 +1,7 @@
 import { prisma } from '../prisma.js';
 import { HttpError } from '../lib/http-error.js';
-import { decodeCursor, encodeCursor, parseLimit } from '../lib/pagination.js';
+import { decodeCursor, encodeCursor, buildCursorWhere, toPage, parseLimit, type CursorPage } from '../lib/pagination.js';
+import { assertNotBlocked, isBlocked } from './block.js';
 import { toSafeUser, type SafeUser } from './auth.js';
 import { uploadImage } from './cloudinary.js';
 import { joinUserToConversation, leaveUserFromConversation } from '../realtime/rooms.js';
@@ -103,6 +104,7 @@ export async function createConversation(input: CreateConversationInput): Promis
     // participantId's presence for DIRECT is enforced by createConversationSchema.
     const targetId = participantId!;
     if (targetId === creatorId) throw new HttpError(400, 'Cannot start a conversation with yourself');
+    await assertNotBlocked(targetId, creatorId);
 
     const existing = await prisma.conversation.findFirst({
       where: {
@@ -285,7 +287,10 @@ export async function addMembers(conversationId: string, userId: string, memberI
 
   const existingUsers = await prisma.user.findMany({ where: { id: { in: uniqueIds } }, select: { id: true, name: true } });
 
+  const addedUserIds: string[] = [];
   for (const user of existingUsers) {
+    if (await isBlocked(user.id, userId)) continue; // silently skip — not a hard error for a bulk-add call
+
     const existingMember = await prisma.conversationMember.findUnique({
       where: { conversationId_userId: { conversationId, userId: user.id } },
     });
@@ -297,15 +302,19 @@ export async function addMembers(conversationId: string, userId: string, memberI
         });
         joinUserToConversation(user.id, conversationId);
         await postSystemMessage(conversationId, `${user.name} joined the group`);
+        addedUserIds.push(user.id);
       }
       continue; // already an active member — no-op
     }
     await prisma.conversationMember.create({ data: { conversationId, userId: user.id, role: 'MEMBER' } });
     joinUserToConversation(user.id, conversationId);
     await postSystemMessage(conversationId, `${user.name} was added to the group`);
+    addedUserIds.push(user.id);
   }
 
-  getIo().to(conversationRoom(conversationId)).emit('conversation:member-added', { conversationId, memberIds: existingUsers.map((u) => u.id) });
+  if (addedUserIds.length > 0) {
+    getIo().to(conversationRoom(conversationId)).emit('conversation:member-added', { conversationId, memberIds: addedUserIds });
+  }
 
   return toConversationDTO(conversationId);
 }
@@ -353,4 +362,193 @@ export async function leaveConversation(conversationId: string, userId: string):
   await assertGroup(conversationId);
   await assertMembership(conversationId, userId);
   await departMember(conversationId, userId);
+}
+
+export type GroupJoinStatus = 'MEMBER' | 'PENDING' | 'NONE';
+
+export interface GroupSearchResult {
+  id: string;
+  name: string | null;
+  image: string | null;
+  visibility: GroupVisibility | null;
+  memberCount: number;
+  createdAt: Date;
+  joinStatus: GroupJoinStatus;
+}
+
+// Only PUBLIC groups are discoverable this way — PRIVATE groups are
+// invite-only and must not be surfaced to non-members via search.
+export async function searchGroups(
+  viewerId: string,
+  query: { q?: string; cursor?: string; limit?: string },
+): Promise<CursorPage<GroupSearchResult>> {
+  const q = (query.q ?? '').trim();
+  if (!q) return { items: [], nextCursor: null };
+
+  const limit = parseLimit(query.limit);
+  const cursor = decodeCursor(query.cursor);
+
+  const rows = await prisma.conversation.findMany({
+    where: {
+      type: 'GROUP',
+      visibility: 'PUBLIC',
+      name: { contains: q, mode: 'insensitive' },
+      ...buildCursorWhere(cursor),
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+    include: { _count: { select: { members: { where: { leftAt: null } } } } },
+  });
+
+  const page = toPage(rows, limit);
+  const ids = page.items.map((c) => c.id);
+
+  const [memberships, pendingRequests] = await Promise.all([
+    prisma.conversationMember.findMany({
+      where: { conversationId: { in: ids }, userId: viewerId, leftAt: null },
+      select: { conversationId: true },
+    }),
+    prisma.groupJoinRequest.findMany({
+      where: { conversationId: { in: ids }, userId: viewerId, status: 'PENDING' },
+      select: { conversationId: true },
+    }),
+  ]);
+  const memberOf = new Set(memberships.map((m) => m.conversationId));
+  const pendingFor = new Set(pendingRequests.map((r) => r.conversationId));
+
+  return {
+    items: page.items.map(({ _count, ...row }) => ({
+      id: row.id,
+      name: row.name,
+      image: row.image,
+      visibility: row.visibility,
+      memberCount: _count.members,
+      createdAt: row.createdAt,
+      joinStatus: memberOf.has(row.id) ? 'MEMBER' : pendingFor.has(row.id) ? 'PENDING' : 'NONE',
+    })),
+    nextCursor: page.nextCursor,
+  };
+}
+
+// Self-service join: PUBLIC groups add the caller immediately, PRIVATE
+// groups create a pending request an OWNER/ADMIN must act on.
+export async function joinGroup(
+  conversationId: string,
+  userId: string,
+): Promise<{ status: 'JOINED' | 'REQUESTED'; conversation?: ConversationDTO }> {
+  const conversation = await assertGroup(conversationId);
+
+  const existingMember = await prisma.conversationMember.findUnique({
+    where: { conversationId_userId: { conversationId, userId } },
+  });
+  if (existingMember && existingMember.leftAt === null) {
+    throw new HttpError(400, 'You are already a member of this group');
+  }
+
+  if (conversation.visibility === 'PRIVATE') {
+    const existingRequest = await prisma.groupJoinRequest.findUnique({
+      where: { conversationId_userId: { conversationId, userId } },
+    });
+    if (existingRequest?.status === 'PENDING') {
+      throw new HttpError(400, 'You already have a pending request to join this group');
+    }
+    await prisma.groupJoinRequest.upsert({
+      where: { conversationId_userId: { conversationId, userId } },
+      create: { conversationId, userId },
+      update: { status: 'PENDING', respondedAt: null },
+    });
+    return { status: 'REQUESTED' };
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+  if (!user) throw new HttpError(404, 'User not found');
+
+  if (existingMember) {
+    await prisma.conversationMember.update({
+      where: { id: existingMember.id },
+      data: { leftAt: null, role: 'MEMBER', joinedAt: new Date() },
+    });
+  } else {
+    const currentCount = await prisma.conversationMember.count({ where: { conversationId, leftAt: null } });
+    if (currentCount + 1 > MAX_GROUP_MEMBERS) {
+      throw new HttpError(400, `A group can have at most ${MAX_GROUP_MEMBERS} members`);
+    }
+    await prisma.conversationMember.create({ data: { conversationId, userId, role: 'MEMBER' } });
+  }
+
+  joinUserToConversation(userId, conversationId);
+  await postSystemMessage(conversationId, `${user.name} joined the group`);
+  getIo().to(conversationRoom(conversationId)).emit('conversation:member-added', { conversationId, memberIds: [userId] });
+
+  return { status: 'JOINED', conversation: await toConversationDTO(conversationId) };
+}
+
+export async function cancelJoinRequest(conversationId: string, userId: string): Promise<void> {
+  await assertGroup(conversationId);
+  await prisma.groupJoinRequest.deleteMany({ where: { conversationId, userId, status: 'PENDING' } });
+}
+
+export interface JoinRequestDTO {
+  id: string;
+  user: SafeUser;
+  createdAt: Date;
+}
+
+export async function listJoinRequests(conversationId: string, actingUserId: string): Promise<JoinRequestDTO[]> {
+  await assertGroup(conversationId);
+  await assertRole(conversationId, actingUserId, ['OWNER', 'ADMIN']);
+
+  const rows = await prisma.groupJoinRequest.findMany({
+    where: { conversationId, status: 'PENDING' },
+    orderBy: { createdAt: 'asc' },
+    include: { user: true },
+  });
+  return rows.map((r) => ({ id: r.id, user: toSafeUser(r.user), createdAt: r.createdAt }));
+}
+
+export async function respondToJoinRequest(
+  conversationId: string,
+  actingUserId: string,
+  requestId: string,
+  accept: boolean,
+): Promise<void> {
+  await assertGroup(conversationId);
+  await assertRole(conversationId, actingUserId, ['OWNER', 'ADMIN']);
+
+  const request = await prisma.groupJoinRequest.findFirst({
+    where: { id: requestId, conversationId, status: 'PENDING' },
+    include: { user: { select: { name: true } } },
+  });
+  if (!request) throw new HttpError(404, 'Join request not found');
+
+  if (!accept) {
+    await prisma.groupJoinRequest.update({
+      where: { id: request.id },
+      data: { status: 'REJECTED', respondedAt: new Date() },
+    });
+    return;
+  }
+
+  const currentCount = await prisma.conversationMember.count({ where: { conversationId, leftAt: null } });
+  if (currentCount + 1 > MAX_GROUP_MEMBERS) {
+    throw new HttpError(400, `A group can have at most ${MAX_GROUP_MEMBERS} members`);
+  }
+
+  await prisma.$transaction([
+    prisma.groupJoinRequest.update({
+      where: { id: request.id },
+      data: { status: 'ACCEPTED', respondedAt: new Date() },
+    }),
+    prisma.conversationMember.upsert({
+      where: { conversationId_userId: { conversationId, userId: request.userId } },
+      create: { conversationId, userId: request.userId, role: 'MEMBER' },
+      update: { leftAt: null, role: 'MEMBER', joinedAt: new Date() },
+    }),
+  ]);
+
+  joinUserToConversation(request.userId, conversationId);
+  await postSystemMessage(conversationId, `${request.user.name} joined the group`);
+  getIo()
+    .to(conversationRoom(conversationId))
+    .emit('conversation:member-added', { conversationId, memberIds: [request.userId] });
 }

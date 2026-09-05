@@ -104,7 +104,7 @@ class PostRepository {
           ? await _dio.delete('posts/${post.id}/reposts')
           : await _dio.post(
               'posts/${post.id}/reposts',
-              data: {comment: comment ?? ''},
+              data: {'comment': comment},
             );
 
       final data = result.data as Map<String, dynamic>;
@@ -115,15 +115,4 @@ class PostRepository {
       );
     }
   }
-
-  // Future<>
-
-  // Future repost({required String postId, String? comment}) async {
-  //   try {
-  //     final result = await _dio.post(
-  //       '/posts/$postId/reposts',
-  //       data: {comment: comment},
-  //     );
-  //   } on DioException catch (e) {}
-  // }
 }

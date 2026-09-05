@@ -3,15 +3,15 @@ import { z } from 'zod';
 import { HttpError } from '../lib/http-error.js';
 import { MAX_CAPTION_LENGTH } from '../services/post.js';
 import { MAX_TAGS_PER_POST } from '../services/tag.js';
-import { optionalJsonStringArray } from './shared.js';
+import { optionalJsonStringArray, optionalString } from './shared.js';
 
 const POST_KINDS = new Set(['POST', 'REEL']);
 
 export const createPostSchema = z
   .object({
-    kind: z.string().optional(),
-    caption: z.string().optional(),
-    soundId: z.string().optional(),
+    kind: optionalString(),
+    caption: optionalString(),
+    soundId: optionalString(),
     taggedUserIds: optionalJsonStringArray('taggedUserIds'),
   })
   .superRefine((data, ctx) => {
@@ -38,10 +38,10 @@ export function checkCreatePostFile(req: Request, data: CreatePostData) {
   }
 }
 
-export const repostSchema = z.object({ comment: z.string().optional() });
+export const repostSchema = z.object({ comment: optionalString() });
 
 export const addTagsSchema = z
-  .object({ userIds: z.array(z.string()).optional() })
+  .object({ userIds: z.array(z.string()).optional().nullable() })
   .superRefine((data, ctx) => {
     if (!data.userIds || data.userIds.length === 0) {
       ctx.addIssue('userIds is required');

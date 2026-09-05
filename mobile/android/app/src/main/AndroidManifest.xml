@@ -30,6 +30,21 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- App Links for shared post URLs (see backend's
+                 /.well-known/assetlinks.json, which this host must match).
+                 android:host is the current ngrok dev tunnel — it changes
+                 whenever ngrok restarts with a new subdomain, so this must
+                 be updated (and the app reinstalled) to match APP_URL in
+                 the backend's .env whenever that happens. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="impure-hungry-gentleman.ngrok-free.dev"
+                    android:pathPrefix="/share/posts"/>
+            </intent-filter>
         </activity>
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"

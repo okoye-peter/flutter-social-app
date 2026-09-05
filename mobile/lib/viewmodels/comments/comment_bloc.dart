@@ -21,9 +21,12 @@ class CommentBloc extends Bloc<CommentEvent, CommentState> {
     );
     on<CreateCommentEvent>(_processCreateComment, transformer: droppable());
     on<LoadRepliesEvent>(_processLoadReplies, transformer: droppable());
+    // concurrent(), not droppable(): this bloc is shared by every comment
+    // tile in the sheet, so a global droppable() would drop a like tap on
+    // comment B while comment A's is still in flight.
     on<ToggleCommentLikeStatusEvent>(
       _processToggleCommentLikeStatus,
-      transformer: droppable(),
+      transformer: concurrent(),
     );
   }
 

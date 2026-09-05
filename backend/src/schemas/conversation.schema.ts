@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { optionalJsonStringArray } from './shared.js';
+import { optionalJsonStringArray, optionalString } from './shared.js';
 
 function checkVisibility(visibility: string | undefined, ctx: z.RefinementCtx) {
   if (visibility !== undefined && visibility !== 'PRIVATE' && visibility !== 'PUBLIC') {
@@ -9,10 +9,10 @@ function checkVisibility(visibility: string | undefined, ctx: z.RefinementCtx) {
 
 export const createConversationSchema = z
   .object({
-    type: z.string().optional(),
-    participantId: z.string().optional(),
-    name: z.string().optional(),
-    visibility: z.string().optional(),
+    type: optionalString(),
+    participantId: optionalString(),
+    name: optionalString(),
+    visibility: optionalString(),
     memberIds: optionalJsonStringArray('memberIds'),
   })
   .superRefine((data, ctx) => {
@@ -37,7 +37,7 @@ export const createConversationSchema = z
   });
 
 export const updateConversationSchema = z
-  .object({ name: z.string().optional(), visibility: z.string().optional() })
+  .object({ name: optionalString(), visibility: optionalString() })
   .superRefine((data, ctx) => {
     if (data.name !== undefined && !data.name.trim()) {
       ctx.addIssue('name cannot be empty');
@@ -47,15 +47,19 @@ export const updateConversationSchema = z
   });
 
 export const addMembersSchema = z
-  .object({ memberIds: z.array(z.string()).optional() })
+  .object({ memberIds: z.array(z.string()).optional().nullable() })
   .superRefine((data, ctx) => {
     if (!data.memberIds || data.memberIds.length === 0) {
       ctx.addIssue('memberIds is required');
     }
   });
 
+export const respondJoinRequestSchema = z.object({
+  accept: z.boolean(),
+});
+
 export const markReadSchema = z
-  .object({ upToMessageId: z.string().optional() })
+  .object({ upToMessageId: optionalString() })
   .superRefine((data, ctx) => {
     if (!data.upToMessageId) {
       ctx.addIssue('upToMessageId is required');

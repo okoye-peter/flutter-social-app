@@ -2,19 +2,22 @@ import type { Request, Response } from 'express';
 import * as notificationsService from '../services/notifications.js';
 
 export async function registerToken(req: Request, res: Response) {
-  const { userId, token } = req.body as { userId: string; token: string };
-  await notificationsService.registerToken(userId, token);
+  const { token } = req.body as { token: string };
+  await notificationsService.registerToken(req.userId!, token);
   res.status(204).end();
 }
 
+// Sends only to the authenticated caller's own devices — this was
+// previously unauthenticated and trusted a client-supplied userId,
+// letting anyone push notifications to (or register a device against)
+// an arbitrary account.
 export async function send(req: Request, res: Response) {
-  const { userId, title, body, data } = req.body as {
-    userId: string;
+  const { title, body, data } = req.body as {
     title: string;
     body: string;
     data?: Record<string, string>;
   };
-  const result = await notificationsService.sendNotification(userId, title, body, data);
+  const result = await notificationsService.sendNotification(req.userId!, title, body, data);
   res.json(result);
 }
 

@@ -6,6 +6,12 @@ import * as pinService from '../services/pin.js';
 import * as callService from '../services/call.js';
 
 type ListQuery = { cursor?: string; limit?: string };
+type SearchQuery = ListQuery & { q?: string };
+
+export async function searchGroups(req: Request, res: Response) {
+  const page = await conversationService.searchGroups(req.userId!, req.query as SearchQuery);
+  res.json(page);
+}
 
 export async function createConversation(req: Request, res: Response) {
   const { type, participantId, name, visibility, memberIds } = req.body as {
@@ -51,6 +57,32 @@ export async function addMembers(req: Request, res: Response) {
   const { memberIds } = req.body as { memberIds: string[] };
   const conversation = await conversationService.addMembers((req.params.id as string), req.userId!, memberIds);
   res.json({ conversation });
+}
+
+export async function joinGroup(req: Request, res: Response) {
+  const result = await conversationService.joinGroup((req.params.id as string), req.userId!);
+  res.status(result.status === 'JOINED' ? 200 : 202).json(result);
+}
+
+export async function cancelJoinRequest(req: Request, res: Response) {
+  await conversationService.cancelJoinRequest((req.params.id as string), req.userId!);
+  res.status(204).end();
+}
+
+export async function listJoinRequests(req: Request, res: Response) {
+  const items = await conversationService.listJoinRequests((req.params.id as string), req.userId!);
+  res.json({ items });
+}
+
+export async function respondToJoinRequest(req: Request, res: Response) {
+  const { accept } = req.body as { accept: boolean };
+  await conversationService.respondToJoinRequest(
+    (req.params.id as string),
+    req.userId!,
+    (req.params.requestId as string),
+    accept,
+  );
+  res.status(204).end();
 }
 
 export async function removeMember(req: Request, res: Response) {

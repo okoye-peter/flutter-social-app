@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:social_app/core/constants/api_constants.dart';
 import 'package:social_app/core/utils/formatters.dart';
 import 'package:social_app/core/widgets/user_avatar.dart';
 import 'package:social_app/views/feeds/widgets/comment_modal.dart';
@@ -47,7 +49,6 @@ class ReelsTile extends StatefulWidget {
     this.onTapProfile,
     this.onTapFollow,
     this.onTapLike,
-    this.onTapShare,
     this.onTapBookMark,
     this.onTapRepost,
     this.likedByMe = false,
@@ -96,7 +97,6 @@ class ReelsTile extends StatefulWidget {
   final VoidCallback? onTapProfile;
   final VoidCallback? onTapFollow;
   final Future<void> Function()? onTapLike;
-  final Future<void> Function()? onTapShare;
   final Future<void> Function()? onTapBookMark;
   final Future<void> Function()? onTapRepost;
 
@@ -295,6 +295,28 @@ class _ReelsTileState extends State<ReelsTile> {
   void _toggleFollow() {
     setState(() => _isFollowing = !_isFollowing);
     widget.onTapFollow?.call();
+  }
+
+  void _shareReel() {
+    // The public /share/posts/:id page carries Open Graph tags, so apps
+    // like WhatsApp/Twitter render a rich preview card for this link
+    // rather than plain text.
+    final url = '${ApiConstants.appUrl}/share/posts/${widget.postId}';
+    final caption = widget.caption.trim();
+    final captionSuffix = caption.isEmpty ? '' : ': $caption';
+    final text =
+        'Check out this post by ${widget.username} on Social App$captionSuffix\n$url';
+    // Anchors the iPad share popover to this tile; ignored on other
+    // platforms.
+    final box = context.findRenderObject() as RenderBox?;
+    SharePlus.instance.share(
+      ShareParams(
+        text: text,
+        sharePositionOrigin: box != null
+            ? box.localToGlobal(Offset.zero) & box.size
+            : null,
+      ),
+    );
   }
 
   Widget _buildBackground() {
@@ -513,7 +535,7 @@ class _ReelsTileState extends State<ReelsTile> {
                   ReelAction(
                     icon: CupertinoIcons.paperplane,
                     label: formatCount(widget.shareCount),
-                    onTap: () => widget.onTapShare?.call(),
+                    onTap: _shareReel,
                   ),
                   const SizedBox(height: 18),
                   // bookmark

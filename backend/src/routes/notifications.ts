@@ -6,8 +6,13 @@ import { registerTokenSchema, sendNotificationSchema } from '../schemas/notifica
 
 export const notificationsRouter = Router();
 
-notificationsRouter.post('/register-token', validate(registerTokenSchema), notificationsController.registerToken);
-notificationsRouter.post('/send', validate(sendNotificationSchema), notificationsController.send);
+notificationsRouter.post(
+  '/register-token',
+  requireAuth,
+  validate(registerTokenSchema),
+  notificationsController.registerToken,
+);
+notificationsRouter.post('/send', requireAuth, validate(sendNotificationSchema), notificationsController.send);
 
 notificationsRouter.get('/', requireAuth, notificationsController.list);
 notificationsRouter.post('/read-all', requireAuth, notificationsController.markAllRead);
