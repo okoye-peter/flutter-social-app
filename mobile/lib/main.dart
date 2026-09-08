@@ -20,7 +20,6 @@ void main() async {
   await setupLocator();
   await getIt<NotificationService>().init();
   final savedThemeMode = await AdaptiveTheme.getThemeMode();
-  final hasSeenOnboarding = await OnboardingRepository().hasSeenOnboarding();
 
   final authBloc = AuthBloc();
   if (getIt<TokenStorage>().current != null) {
@@ -35,7 +34,10 @@ void main() async {
     }
   });
 
-  final router = buildRouter(authBloc: authBloc, hasSeenOnboarding: hasSeenOnboarding);
+  final router = buildRouter(
+    authBloc: authBloc,
+    hasSeenOnboarding: getIt<OnboardingStatusNotifier>(),
+  );
 
   runApp(MyApp(savedThemeMode: savedThemeMode, router: router, authBloc: authBloc));
 

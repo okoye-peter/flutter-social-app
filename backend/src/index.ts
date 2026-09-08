@@ -2,6 +2,8 @@ import 'dotenv/config';
 import http from 'node:http';
 import cors from 'cors';
 import express from 'express';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './swagger.js';
 import { authRouter } from './routes/auth.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { usersRouter } from './routes/users.js';
@@ -20,6 +22,9 @@ import { initRealtime } from './realtime/index.js';
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 
 app.use('/api/auth', authRouter);
 app.use('/api/notifications', notificationsRouter);

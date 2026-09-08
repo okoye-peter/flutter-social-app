@@ -46,3 +46,33 @@ enum ProfileMediaType { post, reel, repost, mention }
 /// [MediaType]: a video reel is `PostKind.reel` + `MediaType.video`, never
 /// a `PostKind.video`.
 enum PostKind { post, reel }
+
+/// Mirrors the backend's `MessageType` enum (see prisma/schema.prisma).
+/// [system] is never client-submitted — the backend only ever creates it
+/// internally for membership events (e.g. "X joined the group").
+enum MessageType {
+  text,
+  image,
+  video,
+  file,
+  voiceNote,
+  system;
+
+  /// Converts to the uppercase string the backend sends/expects.
+  String toJson() => switch (this) {
+    MessageType.voiceNote => 'VOICE_NOTE',
+    _ => name.toUpperCase(),
+  };
+
+  /// Parses the backend's uppercase `MessageType` string, defaulting to
+  /// [text] for anything unrecognized — matching the backend's own
+  /// `@default(TEXT)`.
+  static MessageType fromJson(String? raw) => switch (raw?.toUpperCase()) {
+    'IMAGE' => MessageType.image,
+    'VIDEO' => MessageType.video,
+    'FILE' => MessageType.file,
+    'VOICE_NOTE' => MessageType.voiceNote,
+    'SYSTEM' => MessageType.system,
+    _ => MessageType.text,
+  };
+}

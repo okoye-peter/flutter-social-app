@@ -25,6 +25,9 @@ class AppRoutes {
   // screen otherwise causes go_router to reconstruct the shell's ancestor
   // chain and collide with the existing '/feeds' page's key.
   static const String profile = '/feeds/profile/:id';
+  // Nested under the chats shell branch for the same reason as profile above.
+  static const String newChat = '/chats/new';
+  static const String chatDetails = '/chats/messages';
 
   /// Builds the actual navigable path for a given reel, e.g.
   /// `feedDetailsPath('abc123')` -> `/feeds/abc123`.

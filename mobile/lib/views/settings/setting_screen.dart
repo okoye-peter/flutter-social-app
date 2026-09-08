@@ -4,10 +4,12 @@ import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:social_app/core/di/service_locator.dart';
 import 'package:social_app/core/helpers/app_toast.dart';
+import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/storage/user_cache.dart';
 import 'package:social_app/models/user_model.dart';
 import 'package:social_app/viewmodels/auth/auth_bloc.dart';
@@ -287,6 +289,10 @@ class _SettingScreenBodyState extends State<_SettingScreenBody> {
     }
   }
 
+  void _onViewProfile() {
+    context.push(AppRoutes.profilePath(_user.id), extra: _user);
+  }
+
   void _confirmLogout() {
     showDialog(
       context: context,
@@ -410,6 +416,18 @@ class _SettingScreenBodyState extends State<_SettingScreenBody> {
               _SettingsGroup(
                 colorScheme: colorScheme,
                 children: [
+                  _SettingsTile(
+                    colorScheme: colorScheme,
+                    iconBackground: _brandColor.withValues(alpha: 0.12),
+                    iconColor: _brandColor,
+                    icon: Icons.person_outline_rounded,
+                    title: 'View profile',
+                    trailing: Icon(
+                      Icons.chevron_right_rounded,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    onTap: _onViewProfile,
+                  ),
                   _SettingsTile(
                     colorScheme: colorScheme,
                     iconBackground: colorScheme.error.withValues(alpha: 0.12),

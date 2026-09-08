@@ -10,6 +10,8 @@ import { conversationRoom } from '../realtime/rooms.js';
 import type {
   Conversation,
   ConversationMember,
+  ConversationType,
+  Message,
   MemberRole,
   GroupVisibility,
 } from '../../generated/prisma/index.js';
@@ -180,9 +182,14 @@ export async function getConversation(conversationId: string, viewerId: string):
   return toConversationDTO(conversationId);
 }
 
-export async function listMyConversations(
+// Shared by listMyConversations and listDirectChats: fetches the viewer's
+// conversation page (optionally narrowed by type/other-member-name) plus the
+// per-conversation lastReadAt needed to compute unread counts.
+async function queryConversationPage(
   viewerId: string,
   query: { cursor?: string; limit?: string },
+  typeFilter?: ConversationType,
+  otherMemberNameQuery?: string,
 ) {
   const limit = parseLimit(query.limit);
   const cursor = decodeCursor(query.cursor);
@@ -197,6 +204,23 @@ export async function listMyConversations(
   const rows = await prisma.conversation.findMany({
     where: {
       id: { in: conversationIds },
+      ...(typeFilter ? { type: typeFilter } : {}),
+      ...(otherMemberNameQuery
+        ? {
+            members: {
+              some: {
+                userId: { not: viewerId },
+                leftAt: null,
+                user: {
+                  OR: [
+                    { name: { contains: otherMemberNameQuery, mode: 'insensitive' } },
+                    { username: { contains: otherMemberNameQuery, mode: 'insensitive' } },
+                  ],
+                },
+              },
+            },
+          }
+        : {}),
       ...(cursor
         ? {
             OR: [
@@ -219,17 +243,29 @@ export async function listMyConversations(
   const last = page.at(-1);
   const nextCursor = hasMore && last ? encodeCursor(last.lastMessageAt ?? last.createdAt, last.id) : null;
 
+  return { page, nextCursor, lastReadByConversation };
+}
+
+async function unreadCountFor(conversationId: string, viewerId: string, lastReadAt: Date | null | undefined): Promise<number> {
+  return prisma.message.count({
+    where: {
+      conversationId,
+      createdAt: { gt: lastReadAt ?? new Date(0) },
+      senderId: { not: viewerId },
+      deletedAt: null,
+    },
+  });
+}
+
+export async function listMyConversations(
+  viewerId: string,
+  query: { cursor?: string; limit?: string },
+) {
+  const { page, nextCursor, lastReadByConversation } = await queryConversationPage(viewerId, query);
+
   const items = await Promise.all(
     page.map(async (conversation) => {
-      const lastReadAt = lastReadByConversation.get(conversation.id) ?? new Date(0);
-      const unreadCount = await prisma.message.count({
-        where: {
-          conversationId: conversation.id,
-          createdAt: { gt: lastReadAt },
-          senderId: { not: viewerId },
-          deletedAt: null,
-        },
-      });
+      const unreadCount = await unreadCountFor(conversation.id, viewerId, lastReadByConversation.get(conversation.id));
       const { members, messages, ...rest } = conversation;
       return {
         ...rest,
@@ -239,6 +275,51 @@ export async function listMyConversations(
         }),
         lastMessage: messages[0] ?? null,
         unreadCount,
+      };
+    }),
+  );
+
+  return { items, nextCursor };
+}
+
+export interface DirectChatItem {
+  conversationId: string;
+  user: SafeUser;
+  lastMessage: Message | null;
+  unreadCount: number;
+  lastMessageAt: Date | null;
+}
+
+// The "chat list" view: one row per person the viewer has a DIRECT
+// conversation with, showing that person (not the raw member list) plus
+// their unread count — as opposed to listMyConversations, which also
+// includes GROUP conversations and returns the full member list.
+//
+// An optional `q` filters this down to chats whose other participant's name
+// or username matches — this is the inbox search (search within chats you
+// already have), as opposed to searchContacts below (search to start a new
+// one). Mirrors how WhatsApp/Instagram split "search my chats" from
+// "find someone new to message" into two separate flows.
+export async function listDirectChats(
+  viewerId: string,
+  query: { cursor?: string; limit?: string; q?: string },
+): Promise<CursorPage<DirectChatItem>> {
+  const q = (query.q ?? '').trim() || undefined;
+  const { page, nextCursor, lastReadByConversation } = await queryConversationPage(viewerId, query, 'DIRECT', q);
+
+  const items = await Promise.all(
+    page.map(async (conversation) => {
+      const unreadCount = await unreadCountFor(conversation.id, viewerId, lastReadByConversation.get(conversation.id));
+      // A DIRECT conversation always has exactly its two original members
+      // (see createConversation) and members can't leave one (leaveConversation
+      // only supports GROUP) — so the other member always exists.
+      const otherMember = conversation.members.find((m) => m.userId !== viewerId)!;
+      return {
+        conversationId: conversation.id,
+        user: toSafeUser(otherMember.user),
+        lastMessage: conversation.messages[0] ?? null,
+        unreadCount,
+        lastMessageAt: conversation.lastMessageAt,
       };
     }),
   );
@@ -425,6 +506,87 @@ export async function searchGroups(
       memberCount: _count.members,
       createdAt: row.createdAt,
       joinStatus: memberOf.has(row.id) ? 'MEMBER' : pendingFor.has(row.id) ? 'PENDING' : 'NONE',
+    })),
+    nextCursor: page.nextCursor,
+  };
+}
+
+export interface ContactSearchResult extends SafeUser {
+  isFollowedByMe: boolean;
+  followsMe: boolean;
+  // Set when the viewer already has a DIRECT conversation with this person —
+  // lets the client open it instead of creating a duplicate one.
+  conversationId: string | null;
+}
+
+// People the viewer can start (or already has) a DIRECT conversation with:
+// the union of who they follow and who follows them, optionally filtered by
+// a name/username query. Unlike users.searchUsers (which searches everyone),
+// this is scoped to the viewer's follow graph since that's who they'd
+// plausibly want to message.
+export async function searchContacts(
+  viewerId: string,
+  query: { q?: string; cursor?: string; limit?: string },
+): Promise<CursorPage<ContactSearchResult>> {
+  const q = (query.q ?? '').trim();
+  const limit = parseLimit(query.limit);
+  const cursor = decodeCursor(query.cursor);
+
+  const [following, followers] = await Promise.all([
+    prisma.follow.findMany({ where: { followerId: viewerId }, select: { followingId: true } }),
+    prisma.follow.findMany({ where: { followingId: viewerId }, select: { followerId: true } }),
+  ]);
+  const followingSet = new Set(following.map((f) => f.followingId));
+  const followerSet = new Set(followers.map((f) => f.followerId));
+  const contactIds = [...new Set([...followingSet, ...followerSet])];
+  if (contactIds.length === 0) return { items: [], nextCursor: null };
+
+  const rows = await prisma.user.findMany({
+    where: {
+      id: { in: contactIds },
+      AND: [
+        ...(q
+          ? [{ OR: [{ name: { contains: q, mode: 'insensitive' as const } }, { username: { contains: q, mode: 'insensitive' as const } }] }]
+          : []),
+        // Hide both directions of a block, same as users.searchUsers.
+        {
+          NOT: {
+            OR: [
+              { blocking: { some: { blockedId: viewerId } } },
+              { blockedBy: { some: { blockerId: viewerId } } },
+            ],
+          },
+        },
+        buildCursorWhere(cursor),
+      ],
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+
+  const page = toPage(rows, limit);
+  const ids = page.items.map((u) => u.id);
+
+  const existingDirects = await prisma.conversation.findMany({
+    where: {
+      type: 'DIRECT',
+      members: { some: { userId: viewerId, leftAt: null } },
+      AND: [{ members: { some: { userId: { in: ids }, leftAt: null } } }],
+    },
+    select: { id: true, members: { where: { leftAt: null }, select: { userId: true } } },
+  });
+  const conversationIdByUser = new Map<string, string>();
+  for (const c of existingDirects) {
+    const other = c.members.find((m) => m.userId !== viewerId);
+    if (other) conversationIdByUser.set(other.userId, c.id);
+  }
+
+  return {
+    items: page.items.map((u) => ({
+      ...toSafeUser(u),
+      isFollowedByMe: followingSet.has(u.id),
+      followsMe: followerSet.has(u.id),
+      conversationId: conversationIdByUser.get(u.id) ?? null,
     })),
     nextCursor: page.nextCursor,
   };

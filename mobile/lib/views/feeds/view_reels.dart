@@ -97,7 +97,9 @@ class _ReelDetails extends StatelessWidget {
       mediaUrl: post.mediaUrl,
       mediaType: post.mediaType,
       mode: ReelInteractionMode.details,
-      avatarUrl: post.user?.image ?? post.user?.getInitials ?? '?',
+      avatarUrl: (post.user?.image.trim().isNotEmpty ?? false)
+          ? post.user!.image
+          : (post.user?.getInitials ?? '?'),
       username: post.user?.username ?? 'friend',
       caption: post.caption ?? '',
       soundTitle: post.sound?.title,

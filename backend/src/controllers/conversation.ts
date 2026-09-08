@@ -38,6 +38,16 @@ export async function listMyConversations(req: Request, res: Response) {
   res.json(page);
 }
 
+export async function listDirectChats(req: Request, res: Response) {
+  const page = await conversationService.listDirectChats(req.userId!, req.query as SearchQuery);
+  res.json(page);
+}
+
+export async function searchContacts(req: Request, res: Response) {
+  const page = await conversationService.searchContacts(req.userId!, req.query as SearchQuery);
+  res.json(page);
+}
+
 export async function getConversation(req: Request, res: Response) {
   const conversation = await conversationService.getConversation((req.params.id as string), req.userId!);
   res.json({ conversation });

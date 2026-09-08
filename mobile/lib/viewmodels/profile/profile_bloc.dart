@@ -41,6 +41,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
           tabs: {for (final tab in ProfileMediaType.values) tab: const ProfileTabInitial()},
         ),
       );
+      // Kick off tab 0's first fetch here, now that state is guaranteed to
+      // be ProfileLoadedState — firing this from the screen's initState
+      // instead races ahead of this handler's await above (ProfileTabRequested
+      // would see the state still ProfileInitialState/Loading and no-op),
+      // leaving the Posts tab spinning forever.
+      add(const ProfileTabRequested(tab: ProfileMediaType.post));
     } catch (e) {
       final message = e is AppException ? e.message : 'Failed to load profile';
       emit(ProfileErrorState(message: message));

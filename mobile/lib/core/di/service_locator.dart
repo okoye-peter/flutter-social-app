@@ -7,6 +7,7 @@ import 'package:social_app/core/networks/dio_client.dart';
 import 'package:social_app/core/storage/token_storage.dart';
 import 'package:social_app/core/storage/user_cache.dart';
 import 'package:social_app/repositories/auth_repository.dart';
+import 'package:social_app/repositories/onboarding_repository.dart';
 import 'package:social_app/services/notification_service.dart';
 
 final getIt = GetIt.instance;
@@ -26,6 +27,11 @@ Future<void> setupLocator() async {
   getIt.registerSingleton<UserCache>(userCache);
 
   getIt.registerSingleton<AuthSessionNotifier>(AuthSessionNotifier());
+
+  final hasSeenOnboarding = await OnboardingRepository().hasSeenOnboarding();
+  getIt.registerSingleton<OnboardingStatusNotifier>(
+    OnboardingStatusNotifier(hasSeenOnboarding),
+  );
 
   getIt.registerSingleton<Dio>(
     DioClient.create(

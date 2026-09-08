@@ -16,7 +16,8 @@ class PostBloc extends Bloc<PostEvent, PostState> {
   PostBloc() : super(PostInitialState()) {
     on<CreatePostEvent>(_processCreatePost, transformer: droppable());
     on<FetchPostsEvent>(
-      (event, emit) => _processFetchPosts(cursor: null, emit: emit),
+      (event, emit) =>
+          _processFetchPosts(cursor: null, emit: emit, completer: event.completer),
       transformer: droppable(),
     );
     on<FetchMovePostsEvent>(
@@ -46,6 +47,14 @@ class PostBloc extends Bloc<PostEvent, PostState> {
   }
 
   final PostRepository _repo = PostRepository();
+
+  /// Reloads the feed's first page and resolves once it has settled
+  /// (loaded or failed) — lets a caller (e.g. pull-to-refresh) await it.
+  Future<void> refresh() {
+    final completer = Completer<void>();
+    add(FetchPostsEvent(completer: completer));
+    return completer.future;
+  }
 
   /// Toggles [post]'s like status and resolves once the request has
   /// settled (reconciled or rolled back) — lets a caller drive a
@@ -97,6 +106,7 @@ class PostBloc extends Bloc<PostEvent, PostState> {
   Future<void> _processFetchPosts({
     String? cursor,
     required Emitter<PostState> emit,
+    Completer<void>? completer,
   }) async {
     final isFirstPage = cursor == null;
     if (isFirstPage) emit(PostLoadingState());
@@ -115,6 +125,8 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     } catch (e) {
       final message = e is AppException ? e.message : 'Failed to load posts';
       emit(PostErrorState(message: message));
+    } finally {
+      completer?.complete();
     }
   }
 
