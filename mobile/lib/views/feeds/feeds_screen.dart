@@ -187,7 +187,9 @@ class _FeedsScreenState extends State<FeedsScreen> {
             mediaUrl: post.mediaUrl,
             mediaType: post.mediaType,
             mode: ReelInteractionMode.feed,
-            avatarUrl: post.user?.image ?? post.user?.getInitials ?? '?',
+            avatarUrl: (post.user?.image.trim().isNotEmpty ?? false)
+                ? post.user!.image
+                : (post.user?.getInitials ?? '?'),
             username: post.user?.username ?? 'friend',
             caption: post.caption ?? '',
             soundTitle: post.sound?.title,
@@ -336,38 +338,54 @@ class _FeedsScreenState extends State<FeedsScreen> {
         MediaQuery.paddingOf(context).top + kToolbarHeight + _storyRowHeight;
 
     return Scaffold(
-      body: Column(
-        children: [
-          AnimatedBuilder(
-            animation: _reelsController,
-            builder: (context, child) {
-              final collapse = _reelsController.hasClients
-                  ? (_reelsController.page ?? 0).clamp(0.0, 1.0)
-                  : 0.0;
-              // Reserves shrinking space in the Column (so the reels
-              // Expanded below grows to fill it) while the header itself
-              // rigidly slides upward within that shrinking window — the
-              // app bar (top) exits first, the story row (bottom) last,
-              // same order a normal scrolled-away header would use.
-              return ClipRect(
-                child: SizedBox(
-                  height: headerHeight * (1 - collapse),
-                  child: OverflowBox(
-                    alignment: Alignment.topCenter,
-                    minHeight: headerHeight,
-                    maxHeight: headerHeight,
-                    child: Transform.translate(
-                      offset: Offset(0, -headerHeight * collapse),
-                      child: child,
+      body: RefreshIndicator(
+        onRefresh: () => Future.wait([
+          context.read<StoryBloc>().refresh(),
+          context.read<PostBloc>().refresh(),
+        ]),
+        // The reels area is a *vertical* PageView (swipe to change reels),
+        // the same axis a pull-to-refresh drag uses — restrict the gesture
+        // to the first reel so it doesn't fight with paging through the
+        // rest of the feed. No PageView exists at all in the error state
+        // (`_reelsController` has no clients then), so the gesture is left
+        // unrestricted there.
+        notificationPredicate: (notification) =>
+            notification.depth == 0 &&
+            (!_reelsController.hasClients ||
+                (_reelsController.page ?? 0).round() == 0),
+        child: Column(
+          children: [
+            AnimatedBuilder(
+              animation: _reelsController,
+              builder: (context, child) {
+                final collapse = _reelsController.hasClients
+                    ? (_reelsController.page ?? 0).clamp(0.0, 1.0)
+                    : 0.0;
+                // Reserves shrinking space in the Column (so the reels
+                // Expanded below grows to fill it) while the header itself
+                // rigidly slides upward within that shrinking window — the
+                // app bar (top) exits first, the story row (bottom) last,
+                // same order a normal scrolled-away header would use.
+                return ClipRect(
+                  child: SizedBox(
+                    height: headerHeight * (1 - collapse),
+                    child: OverflowBox(
+                      alignment: Alignment.topCenter,
+                      minHeight: headerHeight,
+                      maxHeight: headerHeight,
+                      child: Transform.translate(
+                        offset: Offset(0, -headerHeight * collapse),
+                        child: child,
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
-            child: header,
-          ),
-          Expanded(child: reelsArea),
-        ],
+                );
+              },
+              child: header,
+            ),
+            Expanded(child: reelsArea),
+          ],
+        ),
       ),
     );
   }

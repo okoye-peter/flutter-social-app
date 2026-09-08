@@ -27,10 +27,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
+    // Tab 0's first fetch is kicked off by the bloc itself once the profile
+    // finishes loading (TabController's listener never fires for the
+    // already-selected tab 0 on first build, so it can't be relied on here).
     _bloc.add(ProfileLoadRequested(userId: widget.userId, initialUser: widget.initialUser));
-    // TabController's listener never fires for the already-selected tab 0
-    // on first build, so it needs an explicit kick alongside the load.
-    _bloc.add(const ProfileTabRequested(tab: ProfileMediaType.post));
   }
 
   void _onTabChanged() {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -25,6 +27,14 @@ class StoryBloc extends Bloc<StoryEvent, StoryState> {
 
   final StoryRepository _repo = StoryRepository();
 
+  /// Reloads the story row and resolves once it has settled (loaded or
+  /// failed) — lets a caller (e.g. pull-to-refresh) await it.
+  Future<void> refresh() {
+    final completer = Completer<void>();
+    add(LoadStoryEvent(completer: completer));
+    return completer.future;
+  }
+
   Future<void> _processLoadStories(
     LoadStoryEvent event,
     Emitter<StoryState> emit,
@@ -36,6 +46,8 @@ class StoryBloc extends Bloc<StoryEvent, StoryState> {
     } catch (e) {
       final message = e is AppException ? e.message : 'Failed to load stories';
       emit(StoryErrorState(message));
+    } finally {
+      event.completer?.complete();
     }
   }
 

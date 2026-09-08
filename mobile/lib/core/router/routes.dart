@@ -8,6 +8,7 @@ import 'package:social_app/models/post_model.dart';
 import 'package:social_app/models/registration_draft.dart';
 import 'package:social_app/models/story_viewer_args.dart';
 import 'package:social_app/models/user_model.dart';
+import 'package:social_app/repositories/onboarding_repository.dart';
 import 'package:social_app/viewmodels/auth/auth_bloc.dart';
 import 'package:social_app/views/auth/email_veritication_screen.dart';
 import 'package:social_app/views/auth/forgot_password_screen.dart';
@@ -30,7 +31,7 @@ import 'package:social_app/views/users/profile_screen.dart';
 
 GoRouter buildRouter({
   required AuthBloc authBloc,
-  required bool hasSeenOnboarding,
+  required OnboardingStatusNotifier hasSeenOnboarding,
 }) {
   const authFlowRoutes = {
     AppRoutes.login,
@@ -45,20 +46,27 @@ GoRouter buildRouter({
   return GoRouter(
     initialLocation: AppRoutes.onboarding,
     extraCodec: const AppExtraCodec(),
-    refreshListenable: GoRouterRefreshStream(authBloc.stream),
+    // Merged so either an auth-state change *or* completing onboarding
+    // triggers a fresh redirect evaluation — a plain captured bool here
+    // would leave this stuck with whatever value was true at app launch,
+    // since nothing would ever prompt the router to re-check it.
+    refreshListenable: Listenable.merge([
+      GoRouterRefreshStream(authBloc.stream),
+      hasSeenOnboarding,
+    ]),
     redirect: (context, state) {
       final loc = state.matchedLocation;
       final loggedIn = authBloc.state is AuthLoadedState;
 
       if (loc == AppRoutes.onboarding) {
-        if (!hasSeenOnboarding) return null;
+        if (!hasSeenOnboarding.value) return null;
         return loggedIn ? AppRoutes.feeds : AppRoutes.login;
       }
 
       // A fresh install must see onboarding first, however it was
       // opened — including via a deep link (e.g. a shared post) rather
       // than the launcher icon.
-      if (!hasSeenOnboarding) return AppRoutes.onboarding;
+      if (!hasSeenOnboarding.value) return AppRoutes.onboarding;
 
       final isAuthFlow = authFlowRoutes.contains(loc);
       if (!loggedIn && !isAuthFlow) {

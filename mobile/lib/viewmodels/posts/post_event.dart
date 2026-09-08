@@ -26,7 +26,11 @@ final class GetPostDetailsEvent extends PostEvent {
 }
 
 final class FetchPostsEvent extends PostEvent {
-  const FetchPostsEvent();
+  const FetchPostsEvent({this.completer});
+
+  /// Resolved once this fetch has settled (loaded or failed) — lets a
+  /// caller (e.g. pull-to-refresh) await it instead of firing and forgetting.
+  final Completer<void>? completer;
 }
 
 final class TogglePostLikeStatusEvent extends PostEvent {

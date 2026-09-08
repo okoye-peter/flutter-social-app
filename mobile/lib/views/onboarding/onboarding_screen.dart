@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:social_app/core/di/service_locator.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/repositories/onboarding_repository.dart';
 
@@ -88,9 +89,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Future<void> _onGetStarted() async {
+  Future<void> _onGetStarted(BuildContext context) async {
     await _onboardingRepository.completeOnboarding();
-    if (mounted) context.go(AppRoutes.login);
+    // Flips the router's live notifier, not just persisted storage — the
+    // router's redirect logic reads this value, not the stored pref, so
+    // without this it would immediately redirect back to onboarding.
+    getIt<OnboardingStatusNotifier>().value = true;
+    if (context.mounted) context.go(AppRoutes.login);
   }
 
   @override
@@ -239,7 +244,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         child: FilledButton(
                           onPressed: () {
                             _stopAutoPlay();
-                            _onGetStarted();
+                            _onGetStarted(context);
                           },
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF0793F1),

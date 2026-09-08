@@ -31,7 +31,9 @@ class ProfileMediaGrid extends StatelessWidget {
         return CustomScrollView(
           slivers: [
             SliverOverlapInjector(
-              handle: NestedScrollView.sliverOverlapAbsorberHandleFor(innerContext),
+              handle: NestedScrollView.sliverOverlapAbsorberHandleFor(
+                innerContext,
+              ),
             ),
             if (items.isEmpty)
               SliverFillRemaining(
@@ -83,9 +85,15 @@ class ProfileBlockedTabState extends StatelessWidget {
               width: 64,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                color: colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.5,
+                ),
               ),
-              child: Icon(Icons.block_rounded, size: 28, color: colorScheme.onSurfaceVariant),
+              child: Icon(
+                Icons.block_rounded,
+                size: 28,
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 16),
             const Text(
@@ -99,6 +107,17 @@ class ProfileBlockedTabState extends StatelessWidget {
   }
 }
 
+// Cloudinary serves a still frame for any video resource when the URL's
+// extension is swapped for an image one (e.g. "...upload/clip.mp4" ->
+// "...upload/clip.jpg") — no separate thumbnail upload/storage needed.
+// `mediaUrl` is always a Cloudinary URL here (see uploadAttachment).
+String? _videoThumbnailUrl(String? mediaUrl) {
+  if (mediaUrl == null) return null;
+  final lastDot = mediaUrl.lastIndexOf('.');
+  if (lastDot == -1) return null;
+  return '${mediaUrl.substring(0, lastDot)}.jpg';
+}
+
 class _MediaTile extends StatelessWidget {
   const _MediaTile({required this.type, required this.post});
 
@@ -107,32 +126,42 @@ class _MediaTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = post.thumbnailUrl ?? post.mediaUrl ?? '';
+    final imageUrl = switch (post.mediaType) {
+      MediaType.image => post.thumbnailUrl ?? post.mediaUrl,
+      MediaType.video => post.thumbnailUrl ?? _videoThumbnailUrl(post.mediaUrl),
+      MediaType.text => null,
+    };
 
     return GestureDetector(
-      onTap: () => context.push(AppRoutes.feedDetailsPath(post.id), extra: post),
+      onTap: () =>
+          context.push(AppRoutes.feedDetailsPath(post.id), extra: post),
       child: Stack(
         fit: StackFit.expand,
         children: [
-          CachedNetworkImage(
-            imageUrl: imageUrl,
-            fit: BoxFit.cover,
-            placeholder: (context, url) => Shimmer.fromColors(
-              baseColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-              highlightColor: Theme.of(
-                context,
-              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-              child: Container(color: Colors.white),
-            ),
-            errorWidget: (context, url, error) => Container(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: Icon(
-                Icons.image_not_supported_outlined,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                size: 22,
+          if (imageUrl != null)
+            CachedNetworkImage(
+              imageUrl: imageUrl,
+              fit: BoxFit.cover,
+              placeholder: (context, url) => Shimmer.fromColors(
+                baseColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest,
+                highlightColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                child: Container(color: Colors.white),
               ),
-            ),
-          ),
+              errorWidget: (context, url, error) => Container(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Icon(
+                  Icons.image_not_supported_outlined,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  size: 22,
+                ),
+              ),
+            )
+          else
+            _TextPostTile(caption: post.caption ?? ''),
           if (type == ProfileMediaType.reel)
             Positioned.fill(
               child: DecoratedBox(
@@ -153,7 +182,11 @@ class _MediaTile extends StatelessWidget {
             const Positioned(
               left: 6,
               bottom: 6,
-              child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 15),
+              child: Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 15,
+              ),
             ),
           if (type == ProfileMediaType.repost)
             const Positioned(
@@ -168,6 +201,31 @@ class _MediaTile extends StatelessWidget {
               child: _BadgeIcon(icon: Icons.alternate_email_rounded),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Stand-in tile for a text-only post (no image/video to show a thumbnail
+/// of) — the grid still needs *something* per tile, so show the caption.
+class _TextPostTile extends StatelessWidget {
+  const _TextPostTile({required this.caption});
+
+  final String caption;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      color: colorScheme.surfaceContainerHighest,
+      padding: const EdgeInsets.all(10),
+      alignment: Alignment.center,
+      child: Text(
+        caption,
+        maxLines: 5,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 12.5, color: colorScheme.onSurface),
       ),
     );
   }
@@ -234,20 +292,28 @@ class _EmptyState extends StatelessWidget {
               width: 64,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                color: colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.5,
+                ),
               ),
               child: Icon(icon, size: 28, color: colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
             Text(
               title,
-              style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 13,
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
