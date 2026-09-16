@@ -354,6 +354,7 @@ class _ReelsTileState extends State<ReelsTile> {
 
   @override
   Widget build(BuildContext context) {
+    print('ReelsTile build: ${widget.avatarUrl}'); // Debugging line
     final controller = _controller;
     final theme = Theme.of(context);
     // Feed mode renders this tile full-bleed with no ambient SafeArea
