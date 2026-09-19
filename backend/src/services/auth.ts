@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { prisma } from '../prisma.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { hashToken } from '../lib/hash.js';
@@ -9,10 +9,20 @@ import { uploadImage } from './cloudinary.js';
 import { assertVerified, clearVerified } from './otp.js';
 import type { User } from '../../generated/prisma/index.js';
 
-// How long a password-reset link stays valid. Kept short (10 min) since a
-// leaked or forwarded reset email is a real attack window — long TTLs give
-// an attacker more time to use a token they shouldn't have.
-const RESET_TOKEN_TTL_MS = 10 * 60 * 1000;
+// How long a password-reset code stays valid. Kept short (10 min) since a
+// leaked/intercepted code is a real attack window — long TTLs give an
+// attacker more time to use a code they shouldn't have. Mirrors otp.ts's
+// own OTP_TTL_MS/MAX_ATTEMPTS — this uses the same `Otp` table (channel:
+// PASSWORD_RESET) rather than otp.ts's sendOtp/verifyOtp directly, since
+// those enforce the opposite existence check (registration requires the
+// identifier NOT already belong to an account; password reset requires
+// that it DOES).
+const RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const RESET_MAX_ATTEMPTS = 5;
+
+function generateResetCode(): string {
+  return randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
 
 // How long a refresh token stays valid before the user has to log in again.
 // Much longer than the reset token on purpose: it's issued straight to the
@@ -156,41 +166,57 @@ export async function getUserById(userId: string): Promise<SafeUser> {
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
-  if (user) {
-    const rawToken = randomBytes(32).toString('hex');
-    await prisma.passwordResetToken.create({
-      data: {
-        userId: user.id,
-        tokenHash: hashToken(rawToken),
-        expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
-      },
-    });
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  // Same response either way at the controller level — don't leak whether
+  // an account exists for this email.
+  if (!user) return;
 
-    const resetUrl = process.env.RESET_PASSWORD_URL ?? 'http://localhost:3000/reset-password';
-    await sendMail(
-      user.email,
-      'Reset your password',
-      `<p>Click the link below to reset your password. This link expires in 1 hour.</p>
-       <p><a href="${resetUrl}?token=${rawToken}">${resetUrl}?token=${rawToken}</a></p>`,
-    );
-  }
+  const code = generateResetCode();
+  // Drop any still-pending code so only the latest one sent is ever valid,
+  // same as otp.ts's sendOtp.
+  await prisma.otp.deleteMany({ where: { identifier: normalizedEmail, channel: 'PASSWORD_RESET', verifiedAt: null } });
+  await prisma.otp.create({
+    data: {
+      identifier: normalizedEmail,
+      channel: 'PASSWORD_RESET',
+      codeHash: hashToken(code),
+      expiresAt: new Date(Date.now() + RESET_CODE_TTL_MS),
+    },
+  });
+
+  await sendMail(
+    user.email,
+    'Reset your password',
+    `<p>Your password reset code is <strong>${code}</strong>. It expires in 10 minutes.</p>`,
+  );
 }
 
-export async function resetPassword(token: string, newPassword: string): Promise<void> {
-  const resetToken = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
-  if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
-    throw new HttpError(400, 'This reset link is invalid or has expired');
+export async function resetPassword(email: string, code: string, newPassword: string): Promise<void> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const otp = await prisma.otp.findFirst({
+    where: { identifier: normalizedEmail, channel: 'PASSWORD_RESET', verifiedAt: null },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!otp || otp.expiresAt < new Date()) {
+    throw new HttpError(400, 'This code is invalid or has expired');
+  }
+  if (otp.attempts >= RESET_MAX_ATTEMPTS) {
+    throw new HttpError(429, 'Too many attempts, request a new code');
+  }
+  if (hashToken(code) !== otp.codeHash) {
+    await prisma.otp.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
+    throw new HttpError(400, 'Invalid code');
+  }
+
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  if (!user) {
+    throw new HttpError(400, 'This code is invalid or has expired');
   }
 
   await prisma.$transaction([
-    prisma.user.update({
-      where: { id: resetToken.userId },
-      data: { password: await hashPassword(newPassword) },
-    }),
-    prisma.passwordResetToken.updateMany({
-      where: { userId: resetToken.userId, usedAt: null },
-      data: { usedAt: new Date() },
-    }),
+    prisma.user.update({ where: { id: user.id }, data: { password: await hashPassword(newPassword) } }),
+    prisma.otp.update({ where: { id: otp.id }, data: { verifiedAt: new Date() } }),
   ]);
 }

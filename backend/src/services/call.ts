@@ -4,6 +4,10 @@ import { decodeCursor, encodeCursor, parseLimit, type CursorPage } from '../lib/
 import { assertMembership } from './conversation.js';
 import type { Call, CallType } from '../../generated/prisma/index.js';
 
+// Comfortably past the 45s no-answer expiry (realtime/handlers/call.ts), so
+// a RINGING call this old means the expiry timer was lost (server restart).
+const STALE_RINGING_MS = 60_000;
+
 export interface InitiatedCall extends Call {
   inviteeIds: string[];
 }
@@ -16,8 +20,24 @@ export async function initiateCall(conversationId: string, initiatorId: string, 
 
   const activeCall = await prisma.call.findFirst({
     where: { conversationId, status: { in: ['RINGING', 'ONGOING'] } },
+    include: { participants: { select: { status: true } } },
   });
-  if (activeCall) throw new HttpError(409, 'This conversation already has an active call');
+  if (activeCall) {
+    // A call only blocks a new one if it's genuinely live. Clients that
+    // crash, lose network, or reset without saying goodbye leave "zombie"
+    // calls behind (e.g. ONGOING with a single participant), which would
+    // otherwise reject every future invite in this conversation forever.
+    const joined = activeCall.participants.filter((p) => p.status === 'JOINED').length;
+    const isStale =
+      activeCall.status === 'RINGING'
+        ? Date.now() - activeCall.startedAt.getTime() > STALE_RINGING_MS
+        : joined < 2;
+    if (!isStale) throw new HttpError(409, 'This conversation already has an active call');
+
+    await prisma.callParticipant.updateMany({ where: { callId: activeCall.id, status: 'JOINED' }, data: { status: 'LEFT', leftAt: new Date() } });
+    await prisma.callParticipant.updateMany({ where: { callId: activeCall.id, status: 'INVITED' }, data: { status: 'MISSED' } });
+    await prisma.call.update({ where: { id: activeCall.id }, data: { status: 'ENDED', endedAt: new Date() } });
+  }
 
   const members = await prisma.conversationMember.findMany({
     where: { conversationId, leftAt: null },
@@ -74,6 +94,29 @@ export async function declineCall(callId: string, userId: string): Promise<Call>
     }
   }
   return call;
+}
+
+// Auto-transitions a still-RINGING call to MISSED once nobody has answered
+// in time. Returns null (no-op) if the call was already answered, ended,
+// or expired by the time this runs — callers should only emit a
+// call:ended event when this returns non-null.
+export async function expireCall(callId: string): Promise<Call | null> {
+  const call = await prisma.call.findUnique({ where: { id: callId } });
+  if (!call || call.status !== 'RINGING') return null;
+
+  await prisma.callParticipant.updateMany({ where: { callId, status: 'INVITED' }, data: { status: 'MISSED' } });
+  return prisma.call.update({ where: { id: callId }, data: { status: 'MISSED', endedAt: new Date() } });
+}
+
+// Active (JOINED) participants other than [excludeUserId] — lets a newly
+// joining client know who else to send WebRTC offers to, since it has no
+// other way to enumerate who's already in the call.
+export async function listJoinedParticipantIds(callId: string, excludeUserId: string): Promise<string[]> {
+  const rows = await prisma.callParticipant.findMany({
+    where: { callId, status: 'JOINED', userId: { not: excludeUserId } },
+    select: { userId: true },
+  });
+  return rows.map((r) => r.userId);
 }
 
 export async function leaveCall(callId: string, userId: string): Promise<Call> {

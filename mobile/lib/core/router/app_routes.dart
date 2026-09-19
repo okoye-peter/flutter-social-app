@@ -7,6 +7,7 @@ class AppRoutes {
   static const String registerPhone = '/register/phone';
   static const String registerDetails = '/register/details';
   static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
   static const String phoneVerification = '/phone-verification';
   static const String emailVerification = '/email-verification';
   static const String feeds = '/feeds';
@@ -28,6 +29,12 @@ class AppRoutes {
   // Nested under the chats shell branch for the same reason as profile above.
   static const String newChat = '/chats/new';
   static const String chatDetails = '/chats/messages';
+
+  // Top-level (outside every shell) — a call overlay must render above the
+  // bottom-nav tabs regardless of which tab/screen the user was on.
+  static const String callOutgoing = '/calls/outgoing';
+  static const String callIncoming = '/calls/incoming';
+  static const String callActive = '/calls/active';
 
   /// Builds the actual navigable path for a given reel, e.g.
   /// `feedDetailsPath('abc123')` -> `/feeds/abc123`.

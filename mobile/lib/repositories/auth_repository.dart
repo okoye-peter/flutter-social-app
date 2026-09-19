@@ -74,6 +74,29 @@ class AuthRepository {
     }
   }
 
+  Future<void> forgotPassword(String email) async {
+    try {
+      await _dio.post('/auth/forgot-password', data: {'email': email});
+    } on DioException catch (e) {
+      throw e.toAppException('Failed to send reset code');
+    }
+  }
+
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      await _dio.post(
+        '/auth/reset-password',
+        data: {'email': email, 'code': code, 'newPassword': newPassword},
+      );
+    } on DioException catch (e) {
+      throw e.toAppException('Invalid or expired code');
+    }
+  }
+
   Future<AuthResponseModel> login(LoginModel loginData) async {
     try {
       final result = await _dio.post('/auth/login', data: loginData.toJson());

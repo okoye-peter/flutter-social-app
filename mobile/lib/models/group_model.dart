@@ -1,21 +1,6 @@
 import 'package:equatable/equatable.dart';
+import 'package:social_app/core/enums/app_enums.dart';
 
-enum GroupJoinStatus {
-  member,
-  pending,
-  none;
-
-  static GroupJoinStatus fromJson(String? value) {
-    switch (value) {
-      case 'MEMBER':
-        return GroupJoinStatus.member;
-      case 'PENDING':
-        return GroupJoinStatus.pending;
-      default:
-        return GroupJoinStatus.none;
-    }
-  }
-}
 
 class GroupModel extends Equatable {
   final String id;

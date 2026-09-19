@@ -76,3 +76,73 @@ enum MessageType {
     _ => MessageType.text,
   };
 }
+
+enum ConversationVisibility {
+  private, public;
+
+  String toJson() => name.toUpperCase();
+
+  static ConversationVisibility fromJson(String? raw) => switch (raw?.toUpperCase()) {
+    'PUBLIC' => ConversationVisibility.public,
+    _ => ConversationVisibility.private,
+  };
+}
+
+/// Mirrors the backend's `CallType` enum (see prisma/schema.prisma).
+enum CallType {
+  voice, video;
+
+  String toJson() => name.toUpperCase();
+
+  static CallType fromJson(String? raw) => switch (raw?.toUpperCase()) {
+    'VIDEO' => CallType.video,
+    _ => CallType.voice,
+  };
+}
+
+enum ConversationType {
+  direct, group;
+
+  String toJson() => name.toUpperCase();
+
+  static ConversationType fromJson(String? raw) => switch (raw?.toUpperCase()) {
+    'GROUP' => ConversationType.group,
+    _ => ConversationType.direct,
+  };
+}
+
+/// Mirrors the backend's `MemberRole` enum (see prisma/schema.prisma) on
+/// `ConversationMember` — gates admin actions like removing/promoting a
+/// member in a group conversation.
+enum MemberRole {
+  owner,
+  admin,
+  member;
+
+  String toJson() => name.toUpperCase();
+
+  static MemberRole fromJson(String? raw) => switch (raw?.toUpperCase()) {
+    'OWNER' => MemberRole.owner,
+    'ADMIN' => MemberRole.admin,
+    _ => MemberRole.member,
+  };
+}
+
+
+
+enum GroupJoinStatus {
+  member,
+  pending,
+  none;
+
+  static GroupJoinStatus fromJson(String? value) {
+    switch (value) {
+      case 'MEMBER':
+        return GroupJoinStatus.member;
+      case 'PENDING':
+        return GroupJoinStatus.pending;
+      default:
+        return GroupJoinStatus.none;
+    }
+  }
+}

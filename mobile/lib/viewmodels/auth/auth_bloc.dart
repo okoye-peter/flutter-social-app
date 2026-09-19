@@ -28,6 +28,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<VerifyEmailOtpEvent>(_processVerifyEmailOtp, transformer: droppable());
     on<SendPhoneOtpEvent>(_processSendPhoneOtp, transformer: droppable());
     on<VerifyPhoneOtpEvent>(_processVerifyPhoneOtp, transformer: droppable());
+    on<RequestPasswordResetEvent>(
+      _processRequestPasswordReset,
+      transformer: droppable(),
+    );
+    on<ResetPasswordEvent>(_processResetPassword, transformer: droppable());
 
     _sessionExpiredSub = getIt<AuthSessionNotifier>().onSessionExpired.listen(
       (_) => add(SessionExpiredEvent()),
@@ -182,6 +187,45 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final message = e is AppException
           ? e.message
           : 'Invalid verification code';
+      emit(AuthErrorState(message));
+    }
+  }
+
+  Future<void> _processRequestPasswordReset(
+    RequestPasswordResetEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoadingState());
+    try {
+      await _repo.forgotPassword(event.email);
+      // Reused, not a new state — identical semantics to the registration
+      // OTP flow's "a code was sent", and OtpVerificationForm/callers only
+      // care about "sent" vs "error" either way.
+      emit(const OtpSentState());
+    } catch (e) {
+      final message = e is AppException
+          ? e.message
+          : 'Failed to send reset code';
+      emit(AuthErrorState(message));
+    }
+  }
+
+  Future<void> _processResetPassword(
+    ResetPasswordEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoadingState());
+    try {
+      await _repo.resetPassword(
+        email: event.email,
+        code: event.code,
+        newPassword: event.newPassword,
+      );
+      // Reused, not a new state — same "the code was accepted" semantics
+      // OtpVerificationForm already expects from the registration flow.
+      emit(const OtpVerifiedState());
+    } catch (e) {
+      final message = e is AppException ? e.message : 'Invalid or expired code';
       emit(AuthErrorState(message));
     }
   }

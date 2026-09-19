@@ -43,6 +43,11 @@ export async function listDirectChats(req: Request, res: Response) {
   res.json(page);
 }
 
+export async function listMyGroups(req: Request, res: Response) {
+  const page = await conversationService.listMyGroups(req.userId!, req.query as SearchQuery);
+  res.json(page);
+}
+
 export async function searchContacts(req: Request, res: Response) {
   const page = await conversationService.searchContacts(req.userId!, req.query as SearchQuery);
   res.json(page);
@@ -110,13 +115,22 @@ export async function listMessages(req: Request, res: Response) {
   res.json(page);
 }
 
+export async function getUploadAuth(req: Request, res: Response) {
+  const { type } = req.body as { type: 'IMAGE' | 'VIDEO' | 'VOICE_NOTE' };
+  const auth = await messageService.getUploadAuth((req.params.id as string), req.userId!, type);
+  res.json(auth);
+}
+
 export async function sendMessage(req: Request, res: Response) {
-  const { type, content, replyToId, mentionedUserIds, durationSeconds } = req.body as {
+  const { type, content, replyToId, mentionedUserIds, durationSeconds, fileUrl, fileName, fileSize } = req.body as {
     type: string;
     content?: string;
     replyToId?: string;
     mentionedUserIds?: string[];
-    durationSeconds?: string;
+    durationSeconds?: number;
+    fileUrl?: string;
+    fileName?: string;
+    fileSize?: number;
   };
   const message = await messageService.sendMessage({
     conversationId: (req.params.id as string),
@@ -126,7 +140,9 @@ export async function sendMessage(req: Request, res: Response) {
     replyToId,
     durationSeconds,
     mentionedUserIds,
-    file: req.file ? { buffer: req.file.buffer, mimetype: req.file.mimetype, size: req.file.size, originalname: req.file.originalname } : undefined,
+    fileUrl,
+    fileName,
+    fileSize,
   });
   res.status(201).json({ message });
 }

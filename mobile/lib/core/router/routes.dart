@@ -18,6 +18,10 @@ import 'package:social_app/views/auth/phone_verification_screen.dart';
 import 'package:social_app/views/auth/register_details_screen.dart';
 import 'package:social_app/views/auth/register_phone_screen.dart';
 import 'package:social_app/views/auth/register_screen.dart';
+import 'package:social_app/views/auth/reset_password_screen.dart';
+import 'package:social_app/views/calls/in_call_screen.dart';
+import 'package:social_app/views/calls/incoming_call_screen.dart';
+import 'package:social_app/views/calls/outgoing_call_screen.dart';
 import 'package:social_app/views/chats/chat_list_screen.dart';
 import 'package:social_app/views/chats/chat_screen.dart';
 import 'package:social_app/views/chats/new_chat_list_screen.dart';
@@ -42,6 +46,7 @@ GoRouter buildRouter({
     AppRoutes.registerPhone,
     AppRoutes.registerDetails,
     AppRoutes.forgotPassword,
+    AppRoutes.resetPassword,
     AppRoutes.phoneVerification,
     AppRoutes.emailVerification,
   };
@@ -123,6 +128,11 @@ GoRouter buildRouter({
       GoRoute(
         path: AppRoutes.forgotPassword,
         builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.resetPassword,
+        builder: (context, state) =>
+            ResetPasswordScreen(email: state.extra as String),
       ),
       GoRoute(
         path: AppRoutes.phoneVerification,
@@ -260,6 +270,22 @@ GoRouter buildRouter({
             ],
           ),
         ],
+      ),
+      // Top-level, not nested under any shell branch — a call must
+      // overlay the whole app, reachable regardless of which shell tab is
+      // active. State comes from the app-wide CallBloc singleton (see
+      // main.dart), not from route `extra`.
+      GoRoute(
+        path: AppRoutes.callOutgoing,
+        builder: (context, state) => const OutgoingCallScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.callIncoming,
+        builder: (context, state) => const IncomingCallScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.callActive,
+        builder: (context, state) => const InCallScreen(),
       ),
     ],
   );

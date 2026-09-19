@@ -147,7 +147,7 @@ authRouter.post('/logout', authController.logout);
  * @openapi
  * /auth/forgot-password:
  *   post:
- *     summary: Request a password-reset email
+ *     summary: Request a password-reset code by email
  *     description: Always returns 200 regardless of whether the email is registered, to avoid leaking account existence.
  *     tags: [Auth]
  *     security: []
@@ -157,7 +157,7 @@ authRouter.post('/logout', authController.logout);
  *         application/json:
  *           schema: { type: object, required: [email], properties: { email: { type: string } } }
  *     responses:
- *       200: { description: 'If an account exists, a reset link was emailed.' }
+ *       200: { description: 'If an account exists, a 6-digit reset code was emailed.' }
  *       400: { $ref: '#/components/responses/BadRequest' }
  */
 authRouter.post('/forgot-password', validate(forgotPasswordSchema), authController.forgotPassword);
@@ -166,8 +166,8 @@ authRouter.post('/forgot-password', validate(forgotPasswordSchema), authControll
  * @openapi
  * /auth/reset-password:
  *   post:
- *     summary: Reset a password using the token from the forgot-password email
- *     description: The token expires 10 minutes after it's issued.
+ *     summary: Reset a password using the code from the forgot-password email
+ *     description: The code expires 10 minutes after it's issued and allows up to 5 attempts.
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -176,13 +176,15 @@ authRouter.post('/forgot-password', validate(forgotPasswordSchema), authControll
  *         application/json:
  *           schema:
  *             type: object
- *             required: [token, newPassword]
+ *             required: [email, code, newPassword]
  *             properties:
- *               token: { type: string }
+ *               email: { type: string }
+ *               code: { type: string, description: '6-digit code emailed by /auth/forgot-password' }
  *               newPassword: { type: string, format: password, description: 'At least 6 characters' }
  *     responses:
  *       200: { description: 'Password updated.' }
- *       400: { description: 'Invalid, expired, or already-used reset link.', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       400: { description: 'Invalid or expired code.', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       429: { description: 'Too many incorrect attempts for this code.', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 authRouter.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword);
 

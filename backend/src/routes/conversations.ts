@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as conversationController from '../controllers/conversation.js';
 import { requireAuth } from '../middleware/auth.js';
-import { uploadProfileImage, uploadChatAttachment } from '../middleware/upload.js';
+import { uploadProfileImage } from '../middleware/upload.js';
 import { validate } from '../middleware/validate.js';
 import {
   addMembersSchema,
@@ -10,7 +10,7 @@ import {
   respondJoinRequestSchema,
   updateConversationSchema,
 } from '../schemas/conversation.schema.js';
-import { checkSendMessageFile, sendMessageSchema } from '../schemas/message.schema.js';
+import { checkSendMessageAttachment, sendMessageSchema, uploadAuthSchema } from '../schemas/message.schema.js';
 
 export const conversationsRouter = Router();
 
@@ -89,8 +89,13 @@ conversationsRouter.get('/', requireAuth, conversationController.listMyConversat
  * @openapi
  * /conversations/groups/search:
  *   get:
- *     summary: Search public groups to discover and join
- *     description: Only PUBLIC groups are discoverable this way — PRIVATE groups are invite-only.
+ *     summary: Search groups to discover and join (PUBLIC and PRIVATE)
+ *     description: >
+ *       Groups matching the name query that the caller is NOT yet a member of — both PUBLIC
+ *       and PRIVATE. Already-joined groups never appear here (see /conversations/groups for
+ *       those). Join via POST /conversations/{id}/join: PUBLIC groups add the caller
+ *       immediately, PRIVATE groups create a pending join request that an OWNER/ADMIN must
+ *       approve or reject — reflected here as `joinStatus: PENDING` until they respond.
  *     tags: [Conversations]
  *     parameters:
  *       - in: query
@@ -101,7 +106,7 @@ conversationsRouter.get('/', requireAuth, conversationController.listMyConversat
  *       - $ref: '#/components/parameters/limitParam'
  *     responses:
  *       200:
- *         description: A page of matching public groups.
+ *         description: A page of matching groups the caller can join or has requested to join.
  *         content:
  *           application/json:
  *             schema:
@@ -115,14 +120,61 @@ conversationsRouter.get('/', requireAuth, conversationController.listMyConversat
  *                       id: { type: string }
  *                       name: { type: string, nullable: true }
  *                       image: { type: string, nullable: true }
- *                       visibility: { type: string, enum: [PUBLIC] }
+ *                       visibility: { type: string, enum: [PRIVATE, PUBLIC], nullable: true }
  *                       memberCount: { type: integer }
  *                       createdAt: { type: string, format: date-time }
- *                       joinStatus: { type: string, enum: [MEMBER, PENDING, NONE] }
+ *                       joinStatus: { type: string, enum: [PENDING, NONE] }
  *                 nextCursor: { type: string, nullable: true }
  *       401: { $ref: '#/components/responses/Unauthorized' }
  */
 conversationsRouter.get('/groups/search', requireAuth, conversationController.searchGroups);
+
+/**
+ * @openapi
+ * /conversations/groups:
+ *   get:
+ *     summary: List the caller's own group chats (PUBLIC and PRIVATE)
+ *     description: >
+ *       Paginated list of every GROUP conversation the caller is currently a member of,
+ *       most recently active first — both PUBLIC and PRIVATE groups are included since
+ *       membership is the only gate. Pass `q` to filter by group name within these
+ *       existing groups — this is inbox search, not discovery (use
+ *       /conversations/groups/search to find new PUBLIC groups to join).
+ *     tags: [Conversations]
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema: { type: string }
+ *         description: Optional filter by group name, scoped to groups the caller already belongs to.
+ *       - $ref: '#/components/parameters/cursorParam'
+ *       - $ref: '#/components/parameters/limitParam'
+ *     responses:
+ *       200:
+ *         description: A page of the caller's group chats.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       conversationId: { type: string }
+ *                       name: { type: string, nullable: true }
+ *                       image: { type: string, nullable: true }
+ *                       visibility: { type: string, enum: [PRIVATE, PUBLIC], nullable: true }
+ *                       memberCount: { type: integer }
+ *                       lastMessage:
+ *                         allOf: [{ $ref: '#/components/schemas/Message' }]
+ *                         nullable: true
+ *                       unreadCount: { type: integer }
+ *                       lastMessageAt: { type: string, format: date-time, nullable: true }
+ *                 nextCursor: { type: string, nullable: true }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ */
+conversationsRouter.get('/groups', requireAuth, conversationController.listMyGroups);
 
 /**
  * @openapi
@@ -480,6 +532,58 @@ conversationsRouter.post(
 
 /**
  * @openapi
+ * /conversations/{id}/upload-auth:
+ *   post:
+ *     summary: Get a signed Cloudinary upload authorization for a chat attachment
+ *     description: >
+ *       The client uploads the attachment directly to Cloudinary using this signed payload
+ *       (never through this server), then calls POST /conversations/{id}/messages with the
+ *       resulting fileUrl. Requires the same membership/block gate as sending a message —
+ *       a blocked or non-member caller can't obtain a signature at all.
+ *     tags: [Conversations]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [type]
+ *             properties:
+ *               type: { type: string, enum: [IMAGE, VIDEO, VOICE_NOTE] }
+ *     responses:
+ *       200:
+ *         description: A signed upload payload for Cloudinary's direct upload API.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 cloudName: { type: string }
+ *                 apiKey: { type: string }
+ *                 timestamp: { type: integer }
+ *                 signature: { type: string }
+ *                 folder: { type: string }
+ *                 allowedFormats: { type: string }
+ *                 resourceType: { type: string, enum: [image, video] }
+ *       400: { $ref: '#/components/responses/BadRequest' }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       403: { description: 'Blocked either direction (DIRECT only).', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: 'Not found, or the caller is not a member.', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ */
+conversationsRouter.post(
+  '/:id/upload-auth',
+  requireAuth,
+  validate(uploadAuthSchema),
+  conversationController.getUploadAuth,
+);
+
+/**
+ * @openapi
  * /conversations/{id}/messages:
  *   get:
  *     summary: List a conversation's messages
@@ -507,9 +611,10 @@ conversationsRouter.post(
  *   post:
  *     summary: Send a message
  *     description: >
- *       multipart/form-data so an optional attachment can be sent. type defaults to TEXT (or FILE if a
- *       file is attached); content is required for TEXT, a file for every other type, and
- *       durationSeconds for VOICE_NOTE.
+ *       Plain JSON — any attachment must already be uploaded to Cloudinary via
+ *       POST /conversations/{id}/upload-auth before calling this. type defaults to TEXT (or
+ *       FILE if fileUrl is set); content is required for TEXT, a fileUrl for every other
+ *       type, and durationSeconds for VOICE_NOTE.
  *     tags: [Conversations]
  *     parameters:
  *       - in: path
@@ -518,16 +623,20 @@ conversationsRouter.post(
  *         schema: { type: string }
  *     requestBody:
  *       content:
- *         multipart/form-data:
+ *         application/json:
  *           schema:
  *             type: object
  *             properties:
  *               type: { type: string, enum: [TEXT, IMAGE, VIDEO, FILE, VOICE_NOTE] }
  *               content: { type: string, description: 'Max 4000 characters.' }
  *               replyToId: { type: string }
- *               mentionedUserIds: { type: string, description: 'JSON-encoded array of user ids.' }
- *               durationSeconds: { type: string, description: 'Required, positive integer, for VOICE_NOTE.' }
- *               file: { type: string, format: binary }
+ *               mentionedUserIds: { type: array, items: { type: string } }
+ *               durationSeconds: { type: integer, description: 'Required, positive integer, for VOICE_NOTE.' }
+ *               fileUrl: { type: string, description: 'Must be a Cloudinary URL for this account, from /upload-auth.' }
+ *               fileName: { type: string }
+ *               fileSize: { type: integer }
+ *               fileResourceType: { type: string, enum: [image, video] }
+ *               fileFormat: { type: string }
  *     responses:
  *       201:
  *         description: The sent message.
@@ -543,8 +652,7 @@ conversationsRouter.get('/:id/messages', requireAuth, conversationController.lis
 conversationsRouter.post(
   '/:id/messages',
   requireAuth,
-  uploadChatAttachment.single('file'),
-  validate(sendMessageSchema, { withFile: checkSendMessageFile }),
+  validate(sendMessageSchema, { withFile: checkSendMessageAttachment }),
   conversationController.sendMessage,
 );
 

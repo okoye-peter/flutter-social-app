@@ -68,10 +68,10 @@ export const forgotPasswordSchema = z
   });
 
 export const resetPasswordSchema = z
-  .object({ token: optionalString(), newPassword: optionalString() })
+  .object({ email: optionalString(), code: optionalString(), newPassword: optionalString() })
   .superRefine((data, ctx) => {
-    if (!data.token || !data.newPassword) {
-      ctx.addIssue('token and newPassword are required');
+    if (!data.email || !data.code || !data.newPassword) {
+      ctx.addIssue('email, code and newPassword are required');
       return;
     }
     if (!isValidPassword(data.newPassword)) {

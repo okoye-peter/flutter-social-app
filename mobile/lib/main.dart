@@ -7,8 +7,12 @@ import 'package:social_app/core/router/routes.dart';
 import 'package:social_app/core/storage/token_storage.dart';
 import 'package:social_app/firebase_options.dart';
 import 'package:social_app/repositories/onboarding_repository.dart';
+import 'package:social_app/core/helpers/app_toast.dart';
+import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/services/notification_service.dart';
+import 'package:social_app/services/socket_service.dart';
 import 'package:social_app/viewmodels/auth/auth_bloc.dart';
+import 'package:social_app/viewmodels/call/call_bloc.dart';
 import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -31,6 +35,9 @@ void main() async {
   authBloc.stream.listen((state) {
     if (state is AuthLoadedState) {
       getIt<NotificationService>().registerToken();
+      getIt<SocketService>().connect();
+    } else if (state is AuthUnauthenticatedState) {
+      getIt<SocketService>().disconnect();
     }
   });
 
@@ -66,20 +73,49 @@ class MyApp extends StatelessWidget {
 
     return BlocProvider<AuthBloc>.value(
       value: authBloc,
-      child: AdaptiveTheme(
-        light: lightTheme.copyWith(
-          textTheme: GoogleFonts.robotoTextTheme(lightTheme.textTheme),
-        ),
-        dark: darkTheme.copyWith(
-          textTheme: GoogleFonts.robotoTextTheme(darkTheme.textTheme),
-        ),
-        initial: savedThemeMode ?? AdaptiveThemeMode.light,
-        builder: (theme, darkTheme) => MaterialApp.router(
-          debugShowCheckedModeBanner: false,
-          title: 'Community Zone',
-          theme: theme,
-          darkTheme: darkTheme,
-          routerConfig: router,
+      child: BlocProvider<CallBloc>.value(
+        value: getIt<CallBloc>(),
+        child: BlocListener<CallBloc, CallState>(
+          listenWhen: (previous, current) => previous.status != current.status,
+          listener: (context, state) {
+            switch (state.status) {
+              case CallStatus.outgoingRinging:
+                router.push(AppRoutes.callOutgoing);
+              case CallStatus.incomingRinging:
+                router.push(AppRoutes.callIncoming);
+              case CallStatus.connecting:
+                // Replaces whichever ringing screen is showing — connecting
+                // to active is a same-screen state update, not a navigation.
+                router.pushReplacement(AppRoutes.callActive);
+              case CallStatus.active:
+                break;
+              case CallStatus.ended:
+                // Failure path: CallBloc emits `ended` (with the reason) and
+                // then `idle` right after — pop only on idle so the call
+                // screen isn't popped twice (the second pop would take the
+                // chat screen with it).
+                final message = state.errorMessage;
+                if (message != null) AppToast.error(message);
+              case CallStatus.idle:
+                if (router.canPop()) router.pop();
+            }
+          },
+          child: AdaptiveTheme(
+            light: lightTheme.copyWith(
+              textTheme: GoogleFonts.robotoTextTheme(lightTheme.textTheme),
+            ),
+            dark: darkTheme.copyWith(
+              textTheme: GoogleFonts.robotoTextTheme(darkTheme.textTheme),
+            ),
+            initial: savedThemeMode ?? AdaptiveThemeMode.light,
+            builder: (theme, darkTheme) => MaterialApp.router(
+              debugShowCheckedModeBanner: false,
+              title: 'Community Zone',
+              theme: theme,
+              darkTheme: darkTheme,
+              routerConfig: router,
+            ),
+          ),
         ),
       ),
     );

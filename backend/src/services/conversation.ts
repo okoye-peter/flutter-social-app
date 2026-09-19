@@ -54,6 +54,27 @@ export async function assertMembership(conversationId: string, userId: string): 
   return member;
 }
 
+// Shared by sendMessage and getUploadAuth: a caller must be an active member
+// and, for a DIRECT thread, not blocked by/blocking the other participant.
+// An existing GROUP's ongoing membership isn't re-policed beyond
+// assertMembership here — addMembers is the actual gate for group
+// membership/blocks, same rationale as sendMessage previously inlined.
+export async function assertCanPostToConversation(conversationId: string, userId: string): Promise<void> {
+  await assertMembership(conversationId, userId);
+
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { type: true },
+  });
+  if (conversation?.type === 'DIRECT') {
+    const otherMember = await prisma.conversationMember.findFirst({
+      where: { conversationId, userId: { not: userId } },
+      select: { userId: true },
+    });
+    if (otherMember) await assertNotBlocked(otherMember.userId, userId);
+  }
+}
+
 export async function assertRole(
   conversationId: string,
   userId: string,
@@ -189,7 +210,7 @@ async function queryConversationPage(
   viewerId: string,
   query: { cursor?: string; limit?: string },
   typeFilter?: ConversationType,
-  otherMemberNameQuery?: string,
+  nameQuery?: string,
 ) {
   const limit = parseLimit(query.limit);
   const cursor = decodeCursor(query.cursor);
@@ -205,21 +226,23 @@ async function queryConversationPage(
     where: {
       id: { in: conversationIds },
       ...(typeFilter ? { type: typeFilter } : {}),
-      ...(otherMemberNameQuery
-        ? {
-            members: {
-              some: {
-                userId: { not: viewerId },
-                leftAt: null,
-                user: {
-                  OR: [
-                    { name: { contains: otherMemberNameQuery, mode: 'insensitive' } },
-                    { username: { contains: otherMemberNameQuery, mode: 'insensitive' } },
-                  ],
+      ...(nameQuery
+        ? typeFilter === 'GROUP'
+          ? { name: { contains: nameQuery, mode: 'insensitive' } }
+          : {
+              members: {
+                some: {
+                  userId: { not: viewerId },
+                  leftAt: null,
+                  user: {
+                    OR: [
+                      { name: { contains: nameQuery, mode: 'insensitive' } },
+                      { username: { contains: nameQuery, mode: 'insensitive' } },
+                    ],
+                  },
                 },
               },
-            },
-          }
+            }
         : {}),
       ...(cursor
         ? {
@@ -317,6 +340,50 @@ export async function listDirectChats(
       return {
         conversationId: conversation.id,
         user: toSafeUser(otherMember.user),
+        lastMessage: conversation.messages[0] ?? null,
+        unreadCount,
+        lastMessageAt: conversation.lastMessageAt,
+      };
+    }),
+  );
+
+  return { items, nextCursor };
+}
+
+export interface GroupChatItem {
+  conversationId: string;
+  name: string | null;
+  image: string | null;
+  visibility: GroupVisibility | null;
+  memberCount: number;
+  lastMessage: Message | null;
+  unreadCount: number;
+  lastMessageAt: Date | null;
+}
+
+// The "my groups" inbox view: one row per GROUP conversation the viewer is
+// currently a member of, PUBLIC or PRIVATE alike — membership is the only
+// gate. As opposed to searchGroups below, which discovers PUBLIC groups the
+// viewer is NOT yet in.
+//
+// An optional `q` filters this down to groups whose own name matches — inbox
+// search within groups you already belong to, not discovery.
+export async function listMyGroups(
+  viewerId: string,
+  query: { cursor?: string; limit?: string; q?: string },
+): Promise<CursorPage<GroupChatItem>> {
+  const q = (query.q ?? '').trim() || undefined;
+  const { page, nextCursor, lastReadByConversation } = await queryConversationPage(viewerId, query, 'GROUP', q);
+
+  const items = await Promise.all(
+    page.map(async (conversation) => {
+      const unreadCount = await unreadCountFor(conversation.id, viewerId, lastReadByConversation.get(conversation.id));
+      return {
+        conversationId: conversation.id,
+        name: conversation.name,
+        image: conversation.image,
+        visibility: conversation.visibility,
+        memberCount: conversation.members.length,
         lastMessage: conversation.messages[0] ?? null,
         unreadCount,
         lastMessageAt: conversation.lastMessageAt,
@@ -445,7 +512,7 @@ export async function leaveConversation(conversationId: string, userId: string):
   await departMember(conversationId, userId);
 }
 
-export type GroupJoinStatus = 'MEMBER' | 'PENDING' | 'NONE';
+export type GroupJoinStatus = 'PENDING' | 'NONE';
 
 export interface GroupSearchResult {
   id: string;
@@ -457,8 +524,13 @@ export interface GroupSearchResult {
   joinStatus: GroupJoinStatus;
 }
 
-// Only PUBLIC groups are discoverable this way — PRIVATE groups are
-// invite-only and must not be surfaced to non-members via search.
+// Discovery: groups the viewer is NOT yet a member of, PUBLIC and PRIVATE
+// alike (already-joined groups belong in listMyGroups instead, not here).
+// The client decides how to join based on `visibility` — PUBLIC groups join
+// immediately via joinGroup, PRIVATE ones go through joinGroup too but land
+// as a pending GroupJoinRequest that an OWNER/ADMIN must approve or reject
+// (see listJoinRequests/respondToJoinRequest) — same as WhatsApp/Instagram's
+// public-vs-private-group join flow.
 export async function searchGroups(
   viewerId: string,
   query: { q?: string; cursor?: string; limit?: string },
@@ -472,8 +544,8 @@ export async function searchGroups(
   const rows = await prisma.conversation.findMany({
     where: {
       type: 'GROUP',
-      visibility: 'PUBLIC',
       name: { contains: q, mode: 'insensitive' },
+      NOT: { members: { some: { userId: viewerId, leftAt: null } } },
       ...buildCursorWhere(cursor),
     },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -484,17 +556,10 @@ export async function searchGroups(
   const page = toPage(rows, limit);
   const ids = page.items.map((c) => c.id);
 
-  const [memberships, pendingRequests] = await Promise.all([
-    prisma.conversationMember.findMany({
-      where: { conversationId: { in: ids }, userId: viewerId, leftAt: null },
-      select: { conversationId: true },
-    }),
-    prisma.groupJoinRequest.findMany({
-      where: { conversationId: { in: ids }, userId: viewerId, status: 'PENDING' },
-      select: { conversationId: true },
-    }),
-  ]);
-  const memberOf = new Set(memberships.map((m) => m.conversationId));
+  const pendingRequests = await prisma.groupJoinRequest.findMany({
+    where: { conversationId: { in: ids }, userId: viewerId, status: 'PENDING' },
+    select: { conversationId: true },
+  });
   const pendingFor = new Set(pendingRequests.map((r) => r.conversationId));
 
   return {
@@ -505,7 +570,7 @@ export async function searchGroups(
       visibility: row.visibility,
       memberCount: _count.members,
       createdAt: row.createdAt,
-      joinStatus: memberOf.has(row.id) ? 'MEMBER' : pendingFor.has(row.id) ? 'PENDING' : 'NONE',
+      joinStatus: pendingFor.has(row.id) ? 'PENDING' : 'NONE',
     })),
     nextCursor: page.nextCursor,
   };

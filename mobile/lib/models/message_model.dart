@@ -89,7 +89,13 @@ class MessageModel extends Equatable {
     return MessageModel(
       id: json['id'] as String,
       conversationId: json['conversationId'] as String,
-      senderId: json['senderId'] as String?,
+      // POST /conversations/:id/messages (create) returns a flat
+      // senderId. GET /conversations/:id/messages (list) strips senderId
+      // and nests a sender: {id, ...} object instead (to also carry
+      // reaction/read-receipt info) — fall back to that shape too, or
+      // "is this my message" silently breaks on every refetch.
+      senderId: json['senderId'] as String? ??
+          (json['sender'] as Map<String, dynamic>?)?['id'] as String?,
       type: MessageType.fromJson(json['type'] as String?),
       content: json['content'] as String?,
       fileUrl: json['fileUrl'] as String?,

@@ -2,9 +2,8 @@ import { prisma } from '../prisma.js';
 import { HttpError } from '../lib/http-error.js';
 import { isRecordNotFoundError, isUniqueConstraintError } from '../lib/prisma-errors.js';
 import { decodeCursor, buildCursorWhere, toPage, parseLimit, type CursorPage } from '../lib/pagination.js';
-import { assertMembership } from './conversation.js';
-import { assertNotBlocked } from './block.js';
-import { uploadAttachment } from './cloudinary.js';
+import { assertMembership, assertCanPostToConversation } from './conversation.js';
+import { createChatAttachmentUploadAuth, type ChatAttachmentType, type SignedUploadAuth } from './cloudinary.js';
 import { toSafeUser, type SafeUser } from './auth.js';
 import { createNotification } from './notifications.js';
 import { getIo } from '../realtime/io.js';
@@ -18,46 +17,35 @@ export interface SendMessageInput {
   senderId: string;
   type: string;
   content?: string;
-  file?: { buffer: Buffer; mimetype: string; size: number; originalname: string };
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
   replyToId?: string;
   mentionedUserIds?: string[];
-  durationSeconds?: string;
+  durationSeconds?: number;
+}
+
+export async function getUploadAuth(
+  conversationId: string,
+  userId: string,
+  type: ChatAttachmentType,
+): Promise<SignedUploadAuth> {
+  await assertCanPostToConversation(conversationId, userId);
+  return createChatAttachmentUploadAuth(conversationId, type);
 }
 
 export async function sendMessage(input: SendMessageInput): Promise<Message> {
-  const { conversationId, senderId, content, file, replyToId, mentionedUserIds, durationSeconds } = input;
-  await assertMembership(conversationId, senderId);
-
-  // Only enforced for DIRECT threads — an existing GROUP's ongoing
-  // membership isn't re-policed per message (mirrors addMembers, which is
-  // the actual gate for group membership/blocks).
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { type: true },
-  });
-  if (conversation?.type === 'DIRECT') {
-    const otherMember = await prisma.conversationMember.findFirst({
-      where: { conversationId, userId: { not: senderId } },
-      select: { userId: true },
-    });
-    if (otherMember) await assertNotBlocked(otherMember.userId, senderId);
-  }
+  const { conversationId, senderId, content, fileUrl, fileName, fileSize, replyToId, mentionedUserIds, durationSeconds } = input;
+  await assertCanPostToConversation(conversationId, senderId);
 
   // type, content, and durationSeconds are already resolved/validated by
-  // checkSendMessageFile (content is already trimmed) — this only derives
-  // what actually needs to be written.
+  // checkSendMessageAttachment (content is already trimmed) — this only
+  // derives what actually needs to be written. The attachment, if any, is
+  // already on Cloudinary by this point (see getUploadAuth) — this is now
+  // a pure DB write with no external I/O.
   const type = input.type as MessageType;
   const trimmedContent = content;
-  const duration = type === 'VOICE_NOTE' ? Number(durationSeconds) : undefined;
-
-  let fileUrl: string | undefined;
-  let fileName: string | undefined;
-  let fileSize: number | undefined;
-  if (file) {
-    fileUrl = await uploadAttachment(file.buffer, 'chat-attachments');
-    fileName = file.originalname;
-    fileSize = file.size;
-  }
+  const duration = type === 'VOICE_NOTE' ? durationSeconds : undefined;
 
   if (replyToId) {
     const parent = await prisma.message.findUnique({

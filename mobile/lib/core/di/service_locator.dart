@@ -9,6 +9,8 @@ import 'package:social_app/core/storage/user_cache.dart';
 import 'package:social_app/repositories/auth_repository.dart';
 import 'package:social_app/repositories/onboarding_repository.dart';
 import 'package:social_app/services/notification_service.dart';
+import 'package:social_app/services/socket_service.dart';
+import 'package:social_app/viewmodels/call/call_bloc.dart';
 
 final getIt = GetIt.instance;
 
@@ -44,6 +46,13 @@ Future<void> setupLocator() async {
   getIt.registerSingleton<NotificationService>(
     NotificationService(getIt<Dio>()),
   );
+
+  getIt.registerSingleton<SocketService>(SocketService(getIt<TokenStorage>()));
+
+  // App-wide singleton, not screen-scoped — an incoming call must be
+  // receivable from any screen. Constructed once here, provided at the
+  // app root (see main.dart), never disposed until app teardown.
+  getIt.registerSingleton<CallBloc>(CallBloc());
 
   getIt.registerLazySingleton<AuthRepository>(() => AuthRepository());
 }

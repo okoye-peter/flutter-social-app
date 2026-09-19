@@ -45,19 +45,8 @@ export const uploadStoryMedia = multer({
   },
 });
 
-const MAX_CHAT_ATTACHMENT_SIZE_BYTES = Number(process.env.MAX_CHAT_ATTACHMENT_SIZE_MB ?? 9) * 1024 * 1024;
-const ALLOWED_CHAT_ATTACHMENT_TYPES = ['image/', 'video/', 'application/pdf', 'audio/'];
-
-// Chat files (including voice notes, hence 'audio/') get their own, larger
-// ceiling than a profile photo — product requirement is 9MB.
-export const uploadChatAttachment = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_CHAT_ATTACHMENT_SIZE_BYTES },
-  fileFilter: (_req, file, cb) => {
-    const isAllowed = ALLOWED_CHAT_ATTACHMENT_TYPES.some((prefix) => file.mimetype.startsWith(prefix));
-    if (!isAllowed) {
-      return cb(new HttpError(400, 'Only image, video, audio, or PDF uploads are allowed'));
-    }
-    cb(null, true);
-  },
-});
+// Chat attachments now upload directly to Cloudinary from the client (see
+// services/cloudinary.ts's createChatAttachmentUploadAuth) — bytes no
+// longer flow through this server, so there's no multer config for them
+// here. Size/format enforcement moved to the signed upload params plus a
+// post-hoc check in schemas/message.schema.ts's checkSendMessageAttachment.

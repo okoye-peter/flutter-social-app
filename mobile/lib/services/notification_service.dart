@@ -2,9 +2,26 @@ import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:social_app/services/call_kit_service.dart';
 
+// Runs in a separate background isolate when the app is backgrounded/killed
+// — no access to getIt/CallBloc/any app state, only what's in `message`
+// itself. A CALL push is data-only (see backend's sendCallPush: no
+// top-level `notification` field) specifically so this branch runs instead
+// of the OS auto-showing a generic banner that would fight CallKit's own
+// native incoming-call UI.
 @pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {}
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  final data = message.data;
+  if (data['type'] != 'CALL') return;
+  final callId = data['callId'] as String?;
+  if (callId == null) return;
+  await showIncomingCallKit(
+    callId: callId,
+    callerName: data['initiatorName'] as String? ?? 'Someone',
+    isVideo: data['callType'] == 'VIDEO',
+  );
+}
 
 class NotificationService {
   NotificationService(this._dio);
