@@ -2,13 +2,13 @@
 
 A full-featured social app built with Flutter: a reels-style feed with stories,
 one-to-one and group chat with replies and reactions, and voice/video calling.
-It talks to its own Node.js + TypeScript backend in [`../backend`](../backend).
+The Flutter app is in [`mobile/`](mobile) and its Node.js + TypeScript backend is in [`backend/`](backend).
 
 <p>
-  <img src="docs/screenshots/feed.png" width="200" alt="Reels feed with stories" />
-  <img src="docs/screenshots/chats.png" width="200" alt="Chats inbox" />
-  <img src="docs/screenshots/chat.png" width="200" alt="One-to-one chat with image and voice note" />
-  <img src="docs/screenshots/new_group.png" width="200" alt="Create group screen" />
+  <img src="mobile/docs/screenshots/feed.png" width="200" alt="Reels feed with stories" />
+  <img src="mobile/docs/screenshots/chats.png" width="200" alt="Chats inbox" />
+  <img src="mobile/docs/screenshots/chat.png" width="200" alt="One-to-one chat with image and voice note" />
+  <img src="mobile/docs/screenshots/new_group.png" width="200" alt="Create group screen" />
 </p>
 
 ## Features
@@ -64,7 +64,7 @@ served with Swagger at `/api/docs`.
 ## Project structure
 
 ```
-lib/
+mobile/lib/
   core/          router, DI (get_it), networking, storage, theme, shared widgets
   models/        API models (fromJson/copyWith)
   repositories/  one class per API area (chat, group, post, user, …)
@@ -77,8 +77,10 @@ lib/
 
 ### 1. Backend
 
+From the repo root:
+
 ```bash
-cd ../backend
+cd backend
 npm install
 cp .env.example .env   # fill in DATABASE_URL, JWT_SECRET, Cloudinary keys
 npx prisma migrate dev
@@ -101,15 +103,16 @@ The iOS simulator can use `http://localhost:3000/api/`. To test on a real
 phone or across devices, expose the backend with a tunnel (e.g. ngrok) and use
 that URL instead.
 
-Then:
+Then, from the repo root:
 
 ```bash
+cd mobile
 flutter pub get
 flutter emulators --launch <emulator_id>   # e.g. Pixel_9_Pro
 flutter run -d emulator-5554               # or pick a device from `flutter devices`
 ```
 
-The app uses the Firebase project configured in `lib/firebase_options.dart`.
+The app uses the Firebase project configured in `mobile/lib/firebase_options.dart`.
 To use your own, re-run `flutterfire configure`.
 
 > The iOS simulator can't receive push notifications (there's no APNs there),
