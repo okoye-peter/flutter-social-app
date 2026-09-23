@@ -14,6 +14,7 @@ import 'package:social_app/models/user_model.dart';
 import 'package:social_app/repositories/call_repository.dart';
 import 'package:social_app/repositories/user_repository.dart';
 import 'package:social_app/services/call_kit_service.dart';
+import 'package:social_app/services/call_ringtone_service.dart';
 import 'package:social_app/services/webrtc/webrtc_engine.dart';
 
 part 'call_event.dart';
@@ -87,12 +88,15 @@ class CallBloc extends Bloc<CallEvent, CallState> {
   }
 
   final CallRepository _repo = CallRepository();
+  final CallRingtoneService _ringtone = CallRingtoneService();
   final UserRepository _userRepo = UserRepository();
   final LocalMediaController _localMedia = LocalMediaController();
   final PeerConnectionManager _peers = PeerConnectionManager();
   late final List<StreamSubscription<Object?>> _subscriptions;
   late final StreamSubscription<callkit.CallEvent?> _callKitSubscription;
   Timer? _tickTimer;
+  // Set when the caller hangs up before call:started returned a callId.
+  String? _cancelledBeforeStartedConversationId;
   Timer? _connectTimer;
 
   // How long a call may sit in `connecting` (accepted, but no peer
@@ -185,6 +189,13 @@ class CallBloc extends Bloc<CallEvent, CallState> {
     Emitter<CallState> emit,
   ) async {
     final event = wrapper.event;
+    if (state.isIdle &&
+        event.initiatorId == _myUserId &&
+        event.conversationId == _cancelledBeforeStartedConversationId) {
+      _cancelledBeforeStartedConversationId = null;
+      _repo.leave(event.callId);
+      return;
+    }
     // Ignore call:started broadcasts for someone else's call in a shared
     // conversation room, or ones that arrive after we already have a callId.
     if (state.status != CallStatus.outgoingRinging || state.callId != null) return;
@@ -245,7 +256,11 @@ class CallBloc extends Bloc<CallEvent, CallState> {
     // leave, never end: `end` requires being the call initiator
     // server-side — leave is the universal "hang up" for any participant,
     // and the backend already auto-ends the call once nobody's left joined.
-    if (callId != null) _repo.leave(callId);
+    if (callId != null) {
+      _repo.leave(callId);
+    } else if (state.status == CallStatus.outgoingRinging) {
+      _cancelledBeforeStartedConversationId = state.conversationId;
+    }
     await _resetToIdle(emit);
   }
 
@@ -421,7 +436,22 @@ class CallBloc extends Bloc<CallEvent, CallState> {
   }
 
   @override
+  void onChange(Change<CallState> change) {
+    super.onChange(change);
+    if (change.currentState.status == change.nextState.status) return;
+    switch (change.nextState.status) {
+      case CallStatus.incomingRinging:
+        unawaited(_ringtone.play(CallTone.incoming));
+      case CallStatus.outgoingRinging:
+        unawaited(_ringtone.play(CallTone.outgoing));
+      default:
+        unawaited(_ringtone.stop());
+    }
+  }
+
+  @override
   Future<void> close() async {
+    await _ringtone.dispose();
     for (final sub in _subscriptions) {
       await sub.cancel();
     }

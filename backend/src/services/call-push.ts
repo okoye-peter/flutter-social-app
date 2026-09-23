@@ -46,3 +46,25 @@ export async function sendCallPush(userId: string, payload: CallPushPayload): Pr
     // call:incoming emit (for foregrounded recipients) is unaffected.
   }
 }
+
+// Tells a backgrounded/killed device to dismiss its native incoming-call UI
+// (the socket is likely disconnected there, so call:ended can't reach it).
+export async function sendCallCancelledPush(userId: string, callId: string): Promise<void> {
+  const rows = await prisma.deviceToken.findMany({ where: { userId } });
+  const tokens = rows.map((row) => row.token);
+  if (tokens.length === 0) return;
+
+  try {
+    await messaging.sendEachForMulticast({
+      tokens,
+      data: { type: 'CALL_CANCELLED', callId },
+      android: { priority: 'high' },
+      apns: {
+        headers: { 'apns-priority': '10', 'apns-push-type': 'background' },
+        payload: { aps: { contentAvailable: true } },
+      },
+    });
+  } catch {
+    // best-effort, same as sendCallPush
+  }
+}

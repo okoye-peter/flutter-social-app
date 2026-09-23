@@ -107,7 +107,8 @@ async function postSystemMessage(conversationId: string, content: string): Promi
     await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: msg.createdAt } });
     return msg;
   });
-  getIo().to(conversationRoom(conversationId)).emit('message:new', { message });
+  // Membership events only happen in groups.
+  getIo().to(conversationRoom(conversationId)).emit('message:new', { message, conversationType: 'GROUP' });
 }
 
 export interface CreateConversationInput {

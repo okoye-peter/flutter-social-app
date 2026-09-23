@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:dio/dio.dart';
 import 'package:equatable/equatable.dart';
@@ -11,6 +13,7 @@ import 'package:social_app/models/message_model.dart';
 import 'package:social_app/models/pending_attachment.dart';
 import 'package:social_app/repositories/chat_repository.dart';
 import 'package:social_app/services/cloudinary_upload_service.dart';
+import 'package:social_app/services/socket_service.dart';
 
 part 'direct_message_event.dart';
 part 'direct_message_state.dart';
@@ -30,6 +33,59 @@ class DirectMessageBloc extends Bloc<DirectMessageEvent, DirectMessageState> {
     );
     on<RetrySendMessageEvent>(_processRetry, transformer: concurrent());
     on<CancelSendMessageEvent>(_processCancel, transformer: concurrent());
+    on<MessageReceivedEvent>(_processMessageReceived, transformer: sequential());
+    on<ToggleReactionEvent>(_processToggleReaction, transformer: concurrent());
+    on<ReactionChangedEvent>(_processReactionChanged, transformer: sequential());
+    _socketSub = getIt<SocketService>().events
+        .where((e) => e.name == 'message:new')
+        .listen((e) {
+          final raw = e.data['message'];
+          if (raw is! Map) return;
+          final message = MessageModel.fromJson(Map<String, dynamic>.from(raw));
+          if (message.conversationId == _conversationId) {
+            add(MessageReceivedEvent(message));
+          }
+        });
+    // Reaction events carry only messageId (no conversationId), so they're
+    // applied only if that message is in this thread's loaded items.
+    _reactionSub = getIt<SocketService>().events
+        .where((e) => e.name == 'message:reaction' || e.name == 'message:reaction-removed')
+        .listen((e) {
+          final messageId = e.data['messageId'];
+          final userId = e.data['userId'];
+          if (messageId is! String || userId is! String) return;
+          add(ReactionChangedEvent(
+            messageId: messageId,
+            userId: userId,
+            emoji: e.name == 'message:reaction' ? e.data['emoji'] as String? : null,
+          ));
+        });
+  }
+
+  late final StreamSubscription<SocketEvent> _socketSub;
+  late final StreamSubscription<SocketEvent> _reactionSub;
+
+  @override
+  Future<void> close() async {
+    await _socketSub.cancel();
+    await _reactionSub.cancel();
+    return super.close();
+  }
+
+  Future<void> _processMessageReceived(
+    MessageReceivedEvent event,
+    Emitter<DirectMessageState> emit,
+  ) async {
+    if (state is! DirectMessageLoadedState) return;
+    final current = state as DirectMessageLoadedState;
+    final message = event.message;
+    // The sender's own message also arrives here; it is already inserted
+    // from the REST response (and vice versa if the socket wins the race).
+    if (current.items.any((m) => m.id == message.id)) return;
+    emit(current.copyWith(items: [message, ...current.items]));
+    if (message.senderId != getIt<UserCache>().current?.id) {
+      _markLatestIncomingRead(message.conversationId, [message]);
+    }
   }
 
   /// The other participant — needed to create the conversation on first
@@ -43,6 +99,10 @@ class DirectMessageBloc extends Bloc<DirectMessageEvent, DirectMessageState> {
   // ChatDetailsArgs.conversationId) — resolved lazily via createDirectChat
   // on the first send, then reused for every send after.
   String? _conversationId;
+
+  /// The current conversation id — unlike ChatDetailsArgs.conversationId,
+  /// this picks up the id created on the first send of a brand-new chat.
+  String? get conversationId => _conversationId;
 
   String _newLocalId() => DateTime.now().microsecondsSinceEpoch.toString();
 
@@ -319,9 +379,11 @@ class DirectMessageBloc extends Bloc<DirectMessageEvent, DirectMessageState> {
     if (state is! DirectMessageLoadedState) return;
     final current = state as DirectMessageLoadedState;
     final pendingSends = {...current.pendingSends}..remove(localId);
-    emit(
-      current.copyWith(items: [message, ...current.items], pendingSends: pendingSends),
-    );
+    // The socket broadcast may already have delivered this message.
+    final items = current.items.any((m) => m.id == message.id)
+        ? current.items
+        : [message, ...current.items];
+    emit(current.copyWith(items: items, pendingSends: pendingSends));
   }
 
   void _failPending(
@@ -344,5 +406,61 @@ class DirectMessageBloc extends Bloc<DirectMessageEvent, DirectMessageState> {
         },
       ),
     );
+  }
+
+  /// Tapping the emoji you already reacted with removes it; any other
+  /// emoji sets/replaces your reaction. Applied optimistically and rolled
+  /// back if the request fails.
+  Future<void> _processToggleReaction(
+    ToggleReactionEvent event,
+    Emitter<DirectMessageState> emit,
+  ) async {
+    final myId = getIt<UserCache>().current?.id;
+    if (myId == null || state is! DirectMessageLoadedState) return;
+    final message = (state as DirectMessageLoadedState).items
+        .where((m) => m.id == event.messageId)
+        .firstOrNull;
+    if (message == null) return;
+
+    final previous = message.reactions[myId];
+    final removing = previous == event.emoji;
+    _applyReaction(emit, event.messageId, myId, removing ? null : event.emoji);
+    try {
+      if (removing) {
+        await _repo.removeReaction(messageId: event.messageId);
+      } else {
+        await _repo.reactToMessage(messageId: event.messageId, emoji: event.emoji);
+      }
+    } on AppException {
+      _applyReaction(emit, event.messageId, myId, previous);
+    }
+  }
+
+  void _processReactionChanged(ReactionChangedEvent event, Emitter<DirectMessageState> emit) {
+    _applyReaction(emit, event.messageId, event.userId, event.emoji);
+  }
+
+  /// Sets [userId]'s reaction on [messageId] to [emoji] (null removes it).
+  void _applyReaction(Emitter<DirectMessageState> emit, String messageId, String userId, String? emoji) {
+    if (state is! DirectMessageLoadedState) return;
+    final current = state as DirectMessageLoadedState;
+    var changed = false;
+    final items = [
+      for (final m in current.items)
+        if (m.id == messageId && m.reactions[userId] != emoji)
+          () {
+            changed = true;
+            final reactions = {...m.reactions};
+            if (emoji == null) {
+              reactions.remove(userId);
+            } else {
+              reactions[userId] = emoji;
+            }
+            return m.copyWith(reactions: reactions);
+          }()
+        else
+          m,
+    ];
+    if (changed) emit(current.copyWith(items: items));
   }
 }

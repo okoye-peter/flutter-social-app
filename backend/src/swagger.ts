@@ -118,6 +118,18 @@ const options: swaggerJsdoc.Options = {
             content: { type: 'string' },
             likesCount: { type: 'integer' },
             replyToId: { type: 'string', nullable: true },
+            replyTo: {
+              type: 'object',
+              nullable: true,
+              description: 'Preview of the replied-to message (on sends and message lists).',
+              properties: {
+                id: { type: 'string' },
+                type: { type: 'string' },
+                content: { type: 'string', nullable: true },
+                deletedAt: { type: 'string', format: 'date-time', nullable: true },
+                sender: { type: 'object', nullable: true, properties: { id: { type: 'string' }, name: { type: 'string' } } },
+              },
+            },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
             user: { $ref: '#/components/schemas/PostAuthor' },
@@ -223,6 +235,11 @@ const options: swaggerJsdoc.Options = {
               type: 'object',
               properties: {
                 sender: { allOf: [{ $ref: '#/components/schemas/SafeUser' }], nullable: true },
+                reactions: {
+                  type: 'array',
+                  description: "Every reaction on the message, one per user.",
+                  items: { type: 'object', properties: { emoji: { type: 'string' }, userId: { type: 'string' } } },
+                },
                 myReaction: { type: 'string', nullable: true },
                 readByMe: { type: 'boolean' },
               },

@@ -66,3 +66,38 @@ final class CancelSendMessageEvent extends DirectMessageEvent {
   @override
   List<Object?> get props => [localId];
 }
+
+/// A `message:new` socket broadcast for this conversation.
+final class MessageReceivedEvent extends DirectMessageEvent {
+  const MessageReceivedEvent(this.message);
+
+  final MessageModel message;
+
+  @override
+  List<Object?> get props => [message];
+}
+
+/// The caller tapped an emoji on a message (from the long-press menu or an
+/// existing reaction chip).
+final class ToggleReactionEvent extends DirectMessageEvent {
+  const ToggleReactionEvent({required this.messageId, required this.emoji});
+
+  final String messageId;
+  final String emoji;
+
+  @override
+  List<Object?> get props => [messageId, emoji];
+}
+
+/// A `message:reaction` / `message:reaction-removed` socket broadcast.
+/// [emoji] is null when the reaction was removed.
+final class ReactionChangedEvent extends DirectMessageEvent {
+  const ReactionChangedEvent({required this.messageId, required this.userId, this.emoji});
+
+  final String messageId;
+  final String userId;
+  final String? emoji;
+
+  @override
+  List<Object?> get props => [messageId, userId, emoji];
+}

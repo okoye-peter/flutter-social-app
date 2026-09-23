@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { prisma } from '../../prisma.js';
 import * as callService from '../../services/call.js';
-import { sendCallPush } from '../../services/call-push.js';
+import { sendCallCancelledPush, sendCallPush } from '../../services/call-push.js';
 import { createNotification } from '../../services/notifications.js';
 import { callRoom, conversationRoom, userRoom } from '../rooms.js';
 
@@ -15,12 +15,24 @@ function errorMessage(err: unknown, fallback: string): string {
 // never wakes; a restart mid-ring is a rare, low-stakes edge case.
 const RING_TIMEOUT_MS = 45_000;
 
+// Ringing callees are not in the call room yet and may not be in the
+// conversation room either, so also target every participant's personal
+// room, and push to devices whose socket is asleep.
+async function broadcastCallEnded(io: Server, callId: string, conversationId: string, reason: string): Promise<void> {
+  io.to(callRoom(callId)).emit('call:ended', { callId, reason });
+  io.to(conversationRoom(conversationId)).emit('call:ended', { callId, reason });
+  const participants = await prisma.callParticipant.findMany({ where: { callId }, select: { userId: true } });
+  for (const { userId } of participants) {
+    io.to(userRoom(userId)).emit('call:ended', { callId, reason });
+    await sendCallCancelledPush(userId, callId);
+  }
+  io.in(callRoom(callId)).socketsLeave(callRoom(callId));
+}
+
 async function expireCallAfterTimeout(io: Server, callId: string, conversationId: string): Promise<void> {
   const expired = await callService.expireCall(callId);
   if (!expired) return; // already answered/ended by the time this fired
-  io.to(callRoom(callId)).emit('call:ended', { callId, reason: 'no-answer' });
-  io.to(conversationRoom(conversationId)).emit('call:ended', { callId, reason: 'no-answer' });
-  io.in(callRoom(callId)).socketsLeave(callRoom(callId));
+  await broadcastCallEnded(io, callId, conversationId, 'no-answer');
 }
 
 export function registerCallHandlers(io: Server, socket: Socket): void {
@@ -98,6 +110,7 @@ export function registerCallHandlers(io: Server, socket: Socket): void {
     try {
       const call = await callService.declineCall(callId, userId);
       io.to(conversationRoom(call.conversationId)).emit('call:declined', { callId, userId });
+      if (call.initiatorId) io.to(userRoom(call.initiatorId)).emit('call:declined', { callId, userId });
     } catch (err) {
       socket.emit('call:error', { message: errorMessage(err, 'Failed to decline call') });
     }
@@ -107,9 +120,12 @@ export function registerCallHandlers(io: Server, socket: Socket): void {
     const { callId } = payload ?? {};
     if (!callId) return;
     try {
-      await callService.leaveCall(callId, userId);
+      const call = await callService.leaveCall(callId, userId);
       io.to(callRoom(callId)).emit('call:participant-left', { callId, userId });
       socket.leave(callRoom(callId));
+      // Last one out (e.g. the caller cancelling while still ringing) ends
+      // the call — everyone still ringing must be told.
+      if (call.status === 'ENDED') await broadcastCallEnded(io, callId, call.conversationId, 'ended');
     } catch (err) {
       socket.emit('call:error', { message: errorMessage(err, 'Failed to leave call') });
     }
@@ -120,9 +136,7 @@ export function registerCallHandlers(io: Server, socket: Socket): void {
     if (!callId) return;
     try {
       const call = await callService.endCall(callId, userId);
-      io.to(callRoom(callId)).emit('call:ended', { callId, reason: 'ended' });
-      io.to(conversationRoom(call.conversationId)).emit('call:ended', { callId, reason: 'ended' });
-      io.in(callRoom(callId)).socketsLeave(callRoom(callId));
+      await broadcastCallEnded(io, callId, call.conversationId, 'ended');
     } catch (err) {
       socket.emit('call:error', { message: errorMessage(err, 'Failed to end call') });
     }

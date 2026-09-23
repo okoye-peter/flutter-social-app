@@ -69,6 +69,7 @@ dependencies:
   share_plus: ^13.3.0
   record: ^6.0.0
   path_provider: ^2.1.6
+  flutter_ringtone_player: ^4.0.0+4
 
 dependency_overrides:
   # video_player_android 2.12.1 regenerated Messages.kt with a Pigeon
@@ -86,6 +87,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter_native_splash:
   color: "#0793F1"
@@ -115,6 +117,7 @@ flutter:
   assets:
     - assets/images/logos/
     - assets/images/onboarding/
+    - assets/audio/
     - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see
@@ -142,3 +145,11 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logos/logo_square.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/logos/logo_square.png"
+  remove_alpha_ios: true

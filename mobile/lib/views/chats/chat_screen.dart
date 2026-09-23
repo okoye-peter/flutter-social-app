@@ -10,8 +10,11 @@ import 'package:social_app/core/di/service_locator.dart';
 import 'package:social_app/core/enums/app_enums.dart';
 import 'package:social_app/core/storage/user_cache.dart';
 import 'package:social_app/core/widgets/user_avatar.dart';
+import 'package:social_app/models/message_model.dart';
 import 'package:social_app/models/pending_attachment.dart';
 import 'package:social_app/models/user_model.dart';
+import 'package:social_app/services/active_chat_tracker.dart';
+import 'package:social_app/services/socket_service.dart';
 import 'package:social_app/viewmodels/call/call_bloc.dart';
 import 'package:social_app/viewmodels/direct_messages/direct_message_bloc.dart';
 import 'package:social_app/views/chats/widgets/chat_empty_thread.dart';
@@ -47,28 +50,130 @@ class _ChatScreenState extends State<ChatScreen> {
   Duration _recordingDuration = Duration.zero;
   Timer? _recordingTimer;
 
+  // Typing indicator. Outgoing: `typing:start` is throttled to one emit per
+  // window while the user keeps typing, and `typing:stop` fires after a
+  // pause, on send/clear, or on leaving. Incoming: the "typing…" label
+  // self-expires in case a `stop` is lost (e.g. the peer's app is killed).
+  static const _typingIdle = Duration(seconds: 3);
+  static const _typingResend = Duration(seconds: 2);
+  static const _typingExpire = Duration(seconds: 5);
+  StreamSubscription<SocketEvent>? _typingSub;
+  // Keeps ActiveChatTracker in sync once a brand-new chat's first send has
+  // created the conversation (widget.conversationId stays null for it).
+  StreamSubscription<DirectMessageState>? _conversationIdSub;
+  Timer? _typingIdleTimer;
+  Timer? _peerTypingExpiry;
+  DateTime? _lastTypingEmit;
+  bool _peerTyping = false;
+
+  // The message being replied to, shown above the input until sent/cancelled.
+  MessageModel? _replyingTo;
+  final _inputFocus = FocusNode();
+
   @override
   void initState() {
     super.initState();
+    ActiveChatTracker.conversationId = widget.conversationId;
     _bloc = DirectMessageBloc(
       otherUserId: widget.otherUser.id,
       conversationId: widget.conversationId,
     )..add(const LoadDirectMessagesEvent());
+    _conversationIdSub = _bloc.stream.listen((_) {
+      final id = _bloc.conversationId;
+      if (id == null || ActiveChatTracker.conversationId == id) return;
+      // Only claim the tracker if it still points at this screen's old
+      // (null) id — not if another chat screen has since taken it over.
+      if (ActiveChatTracker.conversationId == widget.conversationId) {
+        ActiveChatTracker.conversationId = id;
+      }
+      _conversationIdSub?.cancel();
+    });
     _inputController.addListener(() {
       final hasText = _inputController.text.trim().isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
+      _onInputChanged(hasText);
     });
+    _typingSub = getIt<SocketService>().events
+        .where((e) => e.name == 'typing:update')
+        .listen(_onTypingUpdate);
+  }
+
+  void _onInputChanged(bool hasText) {
+    if (!hasText) {
+      _stopTyping();
+      return;
+    }
+    final now = DateTime.now();
+    final last = _lastTypingEmit;
+    if (last == null || now.difference(last) >= _typingResend) {
+      _lastTypingEmit = now;
+      _emitTyping('typing:start');
+    }
+    _typingIdleTimer?.cancel();
+    _typingIdleTimer = Timer(_typingIdle, _stopTyping);
+  }
+
+  void _stopTyping() {
+    _typingIdleTimer?.cancel();
+    if (_lastTypingEmit == null) return;
+    _lastTypingEmit = null;
+    _emitTyping('typing:stop');
+  }
+
+  void _emitTyping(String event) {
+    // The bloc's id, not widget.conversationId: a chat opened from "new
+    // chat" starts with no id and only gets one on the first send — the
+    // widget's copy would stay null and typing would never be sent.
+    final conversationId = _bloc.conversationId;
+    if (conversationId == null) return; // brand-new chat: no room yet
+    getIt<SocketService>().emit(event, {'conversationId': conversationId});
+  }
+
+  void _onTypingUpdate(SocketEvent event) {
+    final data = event.data;
+    final conversationId = _bloc.conversationId;
+    if (conversationId == null ||
+        data['conversationId'] != conversationId ||
+        data['userId'] != widget.otherUser.id) {
+      return;
+    }
+    final isTyping = data['isTyping'] == true;
+    _peerTypingExpiry?.cancel();
+    if (isTyping) {
+      _peerTypingExpiry = Timer(_typingExpire, () {
+        if (mounted) setState(() => _peerTyping = false);
+      });
+    }
+    if (mounted && isTyping != _peerTyping) setState(() => _peerTyping = isTyping);
+  }
+
+  void _startReply(MessageModel message) {
+    setState(() => _replyingTo = message);
+    _inputFocus.requestFocus();
+  }
+
+  /// The id to send as replyToId — and clears the reply, since it applies
+  /// to exactly one outgoing message.
+  String? _takeReplyId() {
+    final id = _replyingTo?.id;
+    if (id != null) setState(() => _replyingTo = null);
+    return id;
+  }
+
+  void _react(MessageModel message, String emoji) {
+    _bloc.add(ToggleReactionEvent(messageId: message.id, emoji: emoji));
   }
 
   void _send() {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
-    _bloc.add(SendTextMessageEvent(content: text));
+    _bloc.add(SendTextMessageEvent(content: text, replyToId: _takeReplyId()));
     _inputController.clear();
+    _stopTyping();
   }
 
   void _startCall(CallType type) {
-    final conversationId = widget.conversationId;
+    final conversationId = _bloc.conversationId;
     if (conversationId == null) return;
     getIt<CallBloc>().add(
       StartOutgoingCallEvent(
@@ -92,6 +197,7 @@ class _ChatScreenState extends State<ChatScreen> {
           fileName: picked.name,
           messageType: type,
         ),
+        replyToId: _takeReplyId(),
       ),
     );
   }
@@ -137,13 +243,22 @@ class _ChatScreenState extends State<ChatScreen> {
           messageType: MessageType.voiceNote,
           durationSeconds: duration.inSeconds,
         ),
+        replyToId: _takeReplyId(),
       ),
     );
   }
 
   @override
   void dispose() {
+    _conversationIdSub?.cancel();
+    if (ActiveChatTracker.conversationId == _bloc.conversationId) {
+      ActiveChatTracker.conversationId = null;
+    }
+    _stopTyping();
+    _typingSub?.cancel();
+    _peerTypingExpiry?.cancel();
     _inputController.dispose();
+    _inputFocus.dispose();
     _scrollController.dispose();
     _recordingTimer?.cancel();
     _recorder.dispose();
@@ -184,10 +299,13 @@ class _ChatScreenState extends State<ChatScreen> {
                       style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
                     ),
                     Text(
-                      user.isOnline ? 'Online' : 'Offline',
+                      _peerTyping ? 'typing…' : (user.isOnline ? 'Online' : 'Offline'),
                       style: TextStyle(
                         fontSize: 12,
-                        color: user.isOnline ? Colors.green : colorScheme.onSurfaceVariant,
+                        fontStyle: _peerTyping ? FontStyle.italic : FontStyle.normal,
+                        color: _peerTyping || user.isOnline
+                            ? Colors.green
+                            : colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -196,16 +314,29 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
           actions: [
-            IconButton(
-              onPressed: widget.conversationId == null
-                  ? null // a call needs an existing conversation — send a
-                  // message first in a brand-new chat
-                  : () => _startCall(CallType.voice),
-              icon: const Icon(Icons.call_outlined),
-            ),
-            IconButton(
-              onPressed: widget.conversationId == null ? null : () => _startCall(CallType.video),
-              icon: const Icon(Icons.videocam_outlined),
+            // Rebuilt on bloc state changes so the buttons enable once the
+            // first send of a brand-new chat has created the conversation.
+            BlocBuilder<DirectMessageBloc, DirectMessageState>(
+              bloc: _bloc,
+              builder: (context, state) {
+                final hasConversation = _bloc.conversationId != null;
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: hasConversation
+                          ? () => _startCall(CallType.voice)
+                          : null, // a call needs an existing conversation —
+                      // send a message first in a brand-new chat
+                      icon: const Icon(Icons.call_outlined),
+                    ),
+                    IconButton(
+                      onPressed: hasConversation ? () => _startCall(CallType.video) : null,
+                      icon: const Icon(Icons.videocam_outlined),
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -252,7 +383,12 @@ class _ChatScreenState extends State<ChatScreen> {
                         // backend's ordering), so no index inversion needed.
                         final message = state.items[index - pendingEntries.length];
                         final isMine = message.senderId == getIt<UserCache>().current?.id;
-                        return MessageBubble(message: message, isMine: isMine);
+                        return MessageBubble(
+                          message: message,
+                          isMine: isMine,
+                          onReply: () => _startReply(message),
+                          onReact: (emoji) => _react(message, emoji),
+                        );
                       },
                     );
                   },
@@ -267,6 +403,16 @@ class _ChatScreenState extends State<ChatScreen> {
                 recordingDuration: _recordingDuration,
                 onStartRecording: _startRecording,
                 onStopRecording: _stopRecording,
+                focusNode: _inputFocus,
+                replyingToName: _replyingTo == null
+                    ? null
+                    : (_replyingTo!.senderId == getIt<UserCache>().current?.id
+                          ? 'yourself'
+                          : widget.otherUser.name),
+                replyingToSummary: _replyingTo == null
+                    ? null
+                    : MessageReplyPreview.fromMessage(_replyingTo!).summary,
+                onCancelReply: () => setState(() => _replyingTo = null),
               ),
             ],
           ),

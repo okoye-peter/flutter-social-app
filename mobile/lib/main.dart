@@ -35,6 +35,7 @@ void main() async {
   authBloc.stream.listen((state) {
     if (state is AuthLoadedState) {
       getIt<NotificationService>().registerToken();
+      getIt<NotificationService>().flushPendingTap();
       getIt<SocketService>().connect();
     } else if (state is AuthUnauthenticatedState) {
       getIt<SocketService>().disconnect();
@@ -45,6 +46,8 @@ void main() async {
     authBloc: authBloc,
     hasSeenOnboarding: getIt<OnboardingStatusNotifier>(),
   );
+
+  getIt<NotificationService>().attachRouter(router);
 
   runApp(MyApp(savedThemeMode: savedThemeMode, router: router, authBloc: authBloc));
 

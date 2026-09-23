@@ -29,6 +29,11 @@ class AppRoutes {
   // Nested under the chats shell branch for the same reason as profile above.
   static const String newChat = '/chats/new';
   static const String chatDetails = '/chats/messages';
+  // Nested under the groups shell branch for the same reason as profile.
+  static const String groupCreate = '/groups/create';
+  static const String groupChat = '/groups/chat';
+  static const String groupInfo = '/groups/info';
+  static const String groupAddMembers = '/groups/add-members';
 
   // Top-level (outside every shell) — a call overlay must render above the
   // bottom-nav tabs regardless of which tab/screen the user was on.

@@ -83,6 +83,7 @@ export async function createNotification(input: CreateNotificationInput): Promis
   try {
     await sendNotification(userId, title, body, {
       type,
+      ...(actorId ? { actorId } : {}),
       ...(postId ? { postId } : {}),
       ...(commentId ? { commentId } : {}),
       ...(conversationId ? { conversationId } : {}),

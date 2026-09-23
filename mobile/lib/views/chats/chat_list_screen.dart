@@ -103,6 +103,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               context,
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
+          
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(56),
             child: Padding(

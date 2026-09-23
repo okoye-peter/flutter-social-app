@@ -5,12 +5,14 @@ import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/router/go_router_refresh_stream.dart';
 import 'package:social_app/core/widgets/home_screen.dart';
 import 'package:social_app/models/chat_details_args.dart';
+import 'package:social_app/models/group_chat_args.dart';
 import 'package:social_app/models/post_model.dart';
 import 'package:social_app/models/registration_draft.dart';
 import 'package:social_app/models/story_viewer_args.dart';
 import 'package:social_app/models/user_model.dart';
 import 'package:social_app/repositories/onboarding_repository.dart';
 import 'package:social_app/viewmodels/auth/auth_bloc.dart';
+import 'package:social_app/viewmodels/group_details/group_details_bloc.dart';
 import 'package:social_app/views/auth/email_veritication_screen.dart';
 import 'package:social_app/views/auth/forgot_password_screen.dart';
 import 'package:social_app/views/auth/login_screen.dart';
@@ -31,7 +33,11 @@ import 'package:social_app/views/feeds/feeds_screen.dart';
 import 'package:social_app/views/feeds/search_screen.dart';
 import 'package:social_app/views/feeds/story_viewer_screen.dart';
 import 'package:social_app/views/feeds/view_reels.dart';
+import 'package:social_app/views/groups/create_group_screen.dart';
+import 'package:social_app/views/groups/group_chat_screen.dart';
+import 'package:social_app/views/groups/group_info_screen.dart';
 import 'package:social_app/views/groups/groups_screen.dart';
+import 'package:social_app/views/groups/member_picker_screen.dart';
 import 'package:social_app/views/onboarding/onboarding_screen.dart';
 import 'package:social_app/views/settings/setting_screen.dart';
 import 'package:social_app/views/users/profile_screen.dart';
@@ -258,6 +264,30 @@ GoRouter buildRouter({
               GoRoute(
                 path: AppRoutes.groups,
                 builder: (context, state) => const GroupsScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'create',
+                    builder: (context, state) => const CreateGroupScreen(),
+                  ),
+                  GoRoute(
+                    path: 'chat',
+                    builder: (context, state) =>
+                        GroupChatScreen(args: state.extra as GroupChatArgs),
+                  ),
+                  GoRoute(
+                    path: 'info',
+                    // The chat screen's own bloc, so edits made here show
+                    // up in its header without a refetch.
+                    builder: (context, state) =>
+                        GroupInfoScreen(bloc: state.extra as GroupDetailsBloc),
+                  ),
+                  GoRoute(
+                    path: 'add-members',
+                    builder: (context, state) => MemberPickerScreen(
+                      args: state.extra as MemberPickerArgs? ?? const MemberPickerArgs(),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

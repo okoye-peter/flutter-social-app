@@ -24,3 +24,13 @@ final class UserWithChatSearchLoadMoreEvent extends UserWithChatSearchEvent {
   @override
   List<Object?> get props => [query, cursor];
 }
+
+/// A `message:new` socket broadcast — bumps the matching row to the top.
+final class UserWithChatSearchMessageReceivedEvent extends UserWithChatSearchEvent {
+  const UserWithChatSearchMessageReceivedEvent(this.message);
+
+  final MessageModel message;
+
+  @override
+  List<Object?> get props => [message];
+}

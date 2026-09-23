@@ -41,6 +41,12 @@ class SocketService {
     'call:answer',
     'call:ice-candidate',
     'call:error',
+    'typing:update',
+    'message:new',
+    'message:reaction',
+    'message:reaction-removed',
+    'conversation:member-added',
+    'conversation:member-removed',
   ];
 
   void connect() {

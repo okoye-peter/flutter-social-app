@@ -1,9 +1,16 @@
+import 'dart:async';
+
 import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:social_app/core/errors/app_exception.dart';
+import 'package:social_app/core/di/service_locator.dart';
+import 'package:social_app/core/storage/user_cache.dart';
 import 'package:social_app/models/chat_user_model.dart';
+import 'package:social_app/models/message_model.dart';
 import 'package:social_app/repositories/chat_repository.dart';
+import 'package:social_app/services/active_chat_tracker.dart';
+import 'package:social_app/services/socket_service.dart';
 
 part 'user_with_chat_search_event.dart';
 part 'user_with_chat_search_state.dart';
@@ -12,6 +19,70 @@ class UserWithChatSearchBloc extends Bloc<UserWithChatSearchEvent, UserWithChatS
   UserWithChatSearchBloc() : super(UserWithChatSearchInitial()) {
     on<UserWithChatSearchQueryChangedEvent>(_processUserWithChatSearch, transformer: droppable());
     on<UserWithChatSearchLoadMoreEvent>(_processLoadMoreUsersWithChat, transformer: droppable());
+    on<UserWithChatSearchMessageReceivedEvent>(_processMessageReceived, transformer: sequential());
+    _socketSub = getIt<SocketService>().events
+        // Direct chats only — without this every group message would miss
+        // the list below and trigger a full refetch.
+        .where((e) => e.name == 'message:new' && e.data['conversationType'] != 'GROUP')
+        .listen((e) {
+          final raw = e.data['message'];
+          if (raw is Map) {
+            add(UserWithChatSearchMessageReceivedEvent(
+              MessageModel.fromJson(Map<String, dynamic>.from(raw)),
+            ));
+          }
+        });
+  }
+
+  late final StreamSubscription<SocketEvent> _socketSub;
+  String _lastQuery = '';
+
+  @override
+  Future<void> close() async {
+    await _socketSub.cancel();
+    return super.close();
+  }
+
+  Future<void> _processMessageReceived(
+    UserWithChatSearchMessageReceivedEvent event,
+    Emitter<UserWithChatSearchState> emit,
+  ) async {
+    final current = state;
+    if (current is! UserWithChatSearchLoadedState) return;
+    final message = event.message;
+    final index = current.items.indexWhere((c) => c.conversationId == message.conversationId);
+
+    // Not in the loaded list (brand-new conversation): refetch so a first
+    // message from someone new shows up. Group messages never get here —
+    // they're filtered out by conversationType above.
+    if (index == -1) {
+      try {
+        final result = await _repo.searchUsersWithChat(query: _lastQuery);
+        emit(UserWithChatSearchLoadedState(
+          items: result.items,
+          hasMorePage: result.hasMorePage,
+          nextCursor: result.nextCursor,
+        ));
+      } catch (_) {}
+      return;
+    }
+
+    final mine = message.senderId == getIt<UserCache>().current?.id;
+    final viewing = ActiveChatTracker.conversationId == message.conversationId;
+    final row = current.items[index];
+    final updated = row.copyWith(
+      lastMessage: message,
+      lastMessageAt: message.createdAt,
+      unreadCount: mine || viewing ? row.unreadCount : row.unreadCount + 1,
+    );
+    final items = [updated, ...current.items.where((c) => c != row)];
+    emit(UserWithChatSearchLoadedState(
+      items: items,
+      hasMorePage: current.hasMorePage,
+      nextCursor: current.nextCursor,
+      isLoadingMore: current.isLoadingMore,
+      loadMoreError: current.loadMoreError,
+    ));
   }
 
   final ChatRepository _repo = ChatRepository();
@@ -20,6 +91,7 @@ class UserWithChatSearchBloc extends Bloc<UserWithChatSearchEvent, UserWithChatS
     UserWithChatSearchQueryChangedEvent event,
     Emitter<UserWithChatSearchState> emit,
   ) async {
+    _lastQuery = event.query;
     emit(UserWithChatSearchLoading());
     try {
       final result = await _repo.searchUsersWithChat(query: event.query);

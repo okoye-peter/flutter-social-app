@@ -34,6 +34,17 @@ export async function getUploadAuth(
   return createChatAttachmentUploadAuth(conversationId, type);
 }
 
+// Just enough of the replied-to message for the client's quoted preview —
+// included on sends (response + `message:new`) and on listMessages, so a
+// reply renders correctly even when its parent is outside the loaded page.
+const REPLY_TO_SELECT = {
+  id: true,
+  type: true,
+  content: true,
+  deletedAt: true,
+  sender: { select: { id: true, name: true } },
+} as const;
+
 export async function sendMessage(input: SendMessageInput): Promise<Message> {
   const { conversationId, senderId, content, fileUrl, fileName, fileSize, replyToId, mentionedUserIds, durationSeconds } = input;
   await assertCanPostToConversation(conversationId, senderId);
@@ -55,7 +66,7 @@ export async function sendMessage(input: SendMessageInput): Promise<Message> {
     if (!parent) throw new HttpError(404, 'Message being replied to was not found');
   }
 
-  const message = await prisma.$transaction(async (tx) => {
+  const { msg: message, conversationType } = await prisma.$transaction(async (tx) => {
     const msg = await tx.message.create({
       data: {
         conversationId,
@@ -68,9 +79,14 @@ export async function sendMessage(input: SendMessageInput): Promise<Message> {
         duration,
         replyToId,
       },
+      include: { replyTo: { select: REPLY_TO_SELECT } },
     });
-    await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: msg.createdAt } });
-    return msg;
+    const conversation = await tx.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessageAt: msg.createdAt },
+      select: { type: true },
+    });
+    return { msg, conversationType: conversation.type };
   });
 
   const activeMembers = await prisma.conversationMember.findMany({
@@ -90,7 +106,9 @@ export async function sendMessage(input: SendMessageInput): Promise<Message> {
     }
   }
 
-  getIo().to(conversationRoom(conversationId)).emit('message:new', { message });
+  // conversationType lets clients route the event without a lookup — e.g.
+  // the direct-chat inbox ignores GROUP messages instead of refetching.
+  getIo().to(conversationRoom(conversationId)).emit('message:new', { message, conversationType });
 
   await Promise.all(
     recipientIds.map((userId) =>
@@ -109,28 +127,33 @@ export async function sendMessage(input: SendMessageInput): Promise<Message> {
 
 const MESSAGE_VIEWER_STATE_INCLUDE = (viewerId: string) => ({
   sender: true,
-  reactions: { where: { userId: viewerId }, select: { emoji: true } },
+  // Every reaction (one per user), not just the viewer's — the client shows
+  // per-emoji counts and applies live `message:reaction` updates per user.
+  reactions: { select: { emoji: true, userId: true } },
   reads: { where: { userId: viewerId }, select: { id: true } },
+  replyTo: { select: REPLY_TO_SELECT },
 });
 
 type MessageWithRawViewerState = Message & {
   sender: import('../../generated/prisma/index.js').User | null;
-  reactions: { emoji: string }[];
+  reactions: { emoji: string; userId: string }[];
   reads: { id: string }[];
 };
 
 export type MessageWithViewerState = Omit<Message, 'senderId'> & {
   sender: SafeUser | null;
+  reactions: { emoji: string; userId: string }[];
   myReaction: string | null;
   readByMe: boolean;
 };
 
-function withViewerState(message: MessageWithRawViewerState): MessageWithViewerState {
+function withViewerState(message: MessageWithRawViewerState, viewerId: string): MessageWithViewerState {
   const { sender, reactions, reads, senderId: _senderId, ...rest } = message;
   return {
     ...rest,
     sender: sender ? toSafeUser(sender) : null,
-    myReaction: reactions[0]?.emoji ?? null,
+    reactions,
+    myReaction: reactions.find((r) => r.userId === viewerId)?.emoji ?? null,
     readByMe: reads.length > 0,
   };
 }
@@ -153,7 +176,7 @@ export async function listMessages(
   });
 
   const page = toPage(rows, limit);
-  return { items: page.items.map(withViewerState), nextCursor: page.nextCursor };
+  return { items: page.items.map((m) => withViewerState(m, viewerId)), nextCursor: page.nextCursor };
 }
 
 export async function deleteMessage(messageId: string, userId: string): Promise<void> {

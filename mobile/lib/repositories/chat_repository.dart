@@ -5,9 +5,7 @@ import 'package:social_app/core/errors/dio_error_mapper.dart';
 import 'package:social_app/models/chat_user_model.dart';
 import 'package:social_app/models/cloudinary_upload_auth_model.dart';
 import 'package:social_app/models/conversation_model.dart';
-import 'package:social_app/models/create_conversation_model.dart';
 import 'package:social_app/models/create_message_model.dart';
-import 'package:social_app/models/group_model.dart';
 import 'package:social_app/models/message_model.dart';
 import 'package:social_app/models/paginate_data_model.dart';
 import 'package:social_app/models/user_model.dart';
@@ -67,61 +65,6 @@ class ChatRepository {
     }
   }
 
-  Future<ConversationModel> createGroupChat({
-    required CreateGroupConversationModel createGroupConversationModel,
-  }) async {
-    try {
-      final result = await _dio.post(
-        '/conversations',
-        data: createGroupConversationModel.toJson(),
-      );
-      final data = result.data as Map<String, dynamic>;
-      return ConversationModel.fromJson(data['conversation']);
-    } on DioException catch (e) {
-      throw e.toAppException(e.message ?? 'Failed to create group chat');
-    }
-  }
-
-  Future<PaginateDataModel<ConversationModel>> fetchGroupsAuthUserBelongTo({
-    String? searchQuery,
-    String? cursor,
-    int? limit = 20,
-  }) async {
-    try {
-      final result = await _dio.get(
-        '/conversations/groups',
-        queryParameters: {'q': ?searchQuery, 'cursor': ?cursor, 'limit': limit},
-      );
-
-      return PaginateDataModel<ConversationModel>.fromJson(
-        result.data as Map<String, dynamic>,
-        ConversationModel.fromJson,
-      );
-    } on DioException catch (e) {
-      throw e.toAppException(e.message ?? 'Failed to fetch user groups');
-    }
-  }
-
-  Future<PaginateDataModel<GroupModel>> fetchNewGroups({
-    String? searchQuery,
-    String? cursor,
-    int? limit = 20,
-  }) async {
-    try {
-      final result = await _dio.get(
-        '/conversations/groups/search',
-        queryParameters: {'q': ?searchQuery, 'cursor': ?cursor, 'limit': limit},
-      );
-
-      return PaginateDataModel<GroupModel>.fromJson(
-        result.data as Map<String, dynamic>,
-        GroupModel.fromJson,
-      );
-    } on DioException catch (e) {
-      throw e.toAppException(e.message ?? 'Failed to fetch groups');
-    }
-  }
-
   Future<ConversationModel> getConversation({
     required String conversationId,
   }) async {
@@ -131,22 +74,6 @@ class ChatRepository {
       return ConversationModel.fromJson(data['conversation']);
     } on DioException catch (e) {
       throw e.toAppException(e.message ?? 'Failed to fetch conversation');
-    }
-  }
-
-  Future<ConversationModel> updateGroup({
-    required String conversationId,
-    required CreateGroupConversationModel createGroupConversationModel,
-  }) async {
-    try {
-      final result = await _dio.put(
-        '/conversations/$conversationId',
-        data: createGroupConversationModel.toJson(),
-      );
-      final data = result.data as Map<String, dynamic>;
-      return ConversationModel.fromJson(data['conversation']);
-    } on DioException catch (e) {
-      throw e.toAppException(e.message ?? 'Failed to update group');
     }
   }
 
@@ -212,6 +139,23 @@ class ChatRepository {
       );
     } on DioException catch (e) {
       throw e.toAppException(e.message ?? 'Failed to fetch messages');
+    }
+  }
+
+  /// Sets (or replaces) the caller's reaction on a message — one per user.
+  Future<void> reactToMessage({required String messageId, required String emoji}) async {
+    try {
+      await _dio.post('/messages/$messageId/reactions', data: {'emoji': emoji});
+    } on DioException catch (e) {
+      throw e.toAppException('Failed to react');
+    }
+  }
+
+  Future<void> removeReaction({required String messageId}) async {
+    try {
+      await _dio.delete('/messages/$messageId/reactions');
+    } on DioException catch (e) {
+      throw e.toAppException('Failed to remove reaction');
     }
   }
 }
