@@ -26,6 +26,9 @@ final class MarkStoryAsViewedEvent extends StoryEvent {
 }
 
 final class LoadStoryEvent extends StoryEvent {
-  const LoadStoryEvent();
+  const LoadStoryEvent({this.completer});
 
+  /// Resolved once this load has settled (loaded or failed) — lets a
+  /// caller (e.g. pull-to-refresh) await it instead of firing and forgetting.
+  final Completer<void>? completer;
 }

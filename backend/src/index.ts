@@ -2,6 +2,8 @@ import 'dotenv/config';
 import http from 'node:http';
 import cors from 'cors';
 import express from 'express';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './swagger.js';
 import { authRouter } from './routes/auth.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { usersRouter } from './routes/users.js';
@@ -12,12 +14,17 @@ import { commentsRouter } from './routes/comments.js';
 import { conversationsRouter } from './routes/conversations.js';
 import { messagesRouter } from './routes/messages.js';
 import { reportsRouter } from './routes/reports.js';
+import { shareRouter } from './routes/share.js';
+import { wellKnownRouter } from './routes/well-known.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { initRealtime } from './realtime/index.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
 
 app.use('/api/auth', authRouter);
 app.use('/api/notifications', notificationsRouter);
@@ -29,6 +36,8 @@ app.use('/api/comments', commentsRouter);
 app.use('/api/conversations', conversationsRouter);
 app.use('/api/messages', messagesRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/share', shareRouter);
+app.use('/.well-known', wellKnownRouter);
 
 app.use(errorHandler);
 

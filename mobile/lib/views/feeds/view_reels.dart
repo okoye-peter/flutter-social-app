@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:social_app/core/enums/app_enums.dart';
+import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/models/post_model.dart';
 import 'package:social_app/viewmodels/posts/post_bloc.dart';
 import 'package:social_app/views/feeds/widgets/reel_media_shimmer.dart';
@@ -92,10 +93,13 @@ class _ReelDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ReelsTile(
+      postId: post.id,
       mediaUrl: post.mediaUrl,
       mediaType: post.mediaType,
       mode: ReelInteractionMode.details,
-      avatarUrl: post.user?.image ?? post.user?.getInitials ?? '?',
+      avatarUrl: (post.user?.image.trim().isNotEmpty ?? false)
+          ? post.user!.image
+          : (post.user?.getInitials ?? '?'),
       username: post.user?.username ?? 'friend',
       caption: post.caption ?? '',
       soundTitle: post.sound?.title,
@@ -112,6 +116,9 @@ class _ReelDetails extends StatelessWidget {
       onTapLike: () => context.read<PostBloc>().toggleLike(post),
       onTapBookMark: () => context.read<PostBloc>().toggleBookMark(post),
       onTapRepost: () => context.read<PostBloc>().toggleRepost(post),
+      onTapProfile: post.user != null
+          ? () => context.push(AppRoutes.profilePath(post.user!.id), extra: post.user)
+          : null,
     );
   }
 }

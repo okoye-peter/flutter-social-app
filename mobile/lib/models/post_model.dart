@@ -94,9 +94,14 @@ class PostModel extends Equatable {
       soundId: json['soundId'],
       user: json['user'] != null ? UserModel.fromJson(json['user']) : null,
       sound: json['sound'] != null ? SoundModel.fromJson(json['sound']) : null,
-      likedByMe: json['likedByMe'],
-      bookmarkedByMe: json['bookmarkedByMe'],
-      repostedByMe: json['repostedByMe']
+      // The create-post endpoint returns the raw post row without these
+      // (they're computed only by endpoints with a viewer to compute
+      // them against) — false is always correct for a freshly created
+      // post anyway, since you can't have already liked/bookmarked/
+      // reposted something you just created.
+      likedByMe: json['likedByMe'] as bool? ?? false,
+      bookmarkedByMe: json['bookmarkedByMe'] as bool? ?? false,
+      repostedByMe: json['repostedByMe'] as bool? ?? false,
     );
   }
 

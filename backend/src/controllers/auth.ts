@@ -67,10 +67,11 @@ export async function logout(req: Request, res: Response) {
 
 export async function forgotPassword(req: Request, res: Response) {
   await authService.requestPasswordReset(req.body.email);
-  res.json({ message: 'If an account with that email exists, a reset link has been sent.' });
+  res.json({ message: 'If an account with that email exists, a reset code has been sent.' });
 }
 
 export async function resetPassword(req: Request, res: Response) {
-  await authService.resetPassword(req.body.token, req.body.newPassword);
+  const { email, code, newPassword } = req.body as { email: string; code: string; newPassword: string };
+  await authService.resetPassword(email, code, newPassword);
   res.json({ message: 'Password updated successfully' });
 }

@@ -11,6 +11,8 @@ export async function followUser(followerId: string, followingId: string): Promi
   if (followerId === followingId) {
     throw new HttpError(400, 'You cannot follow yourself');
   }
+  const target = await prisma.user.findUnique({ where: { id: followingId }, select: { id: true } });
+  if (!target) throw new HttpError(404, 'User not found');
   await assertNotBlocked(followerId, followingId);
 
   try {

@@ -71,3 +71,27 @@ class VerifyPhoneOtpEvent extends AuthEvent {
   @override
   List<Object> get props => [phoneNumber, code];
 }
+
+class RequestPasswordResetEvent extends AuthEvent {
+  const RequestPasswordResetEvent({required this.email});
+
+  final String email;
+
+  @override
+  List<Object> get props => [email];
+}
+
+class ResetPasswordEvent extends AuthEvent {
+  const ResetPasswordEvent({
+    required this.email,
+    required this.code,
+    required this.newPassword,
+  });
+
+  final String email;
+  final String code;
+  final String newPassword;
+
+  @override
+  List<Object> get props => [email, code, newPassword];
+}

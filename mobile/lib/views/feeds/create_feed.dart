@@ -133,7 +133,11 @@ class _CreateFeedScreenState extends State<CreateFeedScreen> {
     context.read<PostBloc>().add(
       CreatePostEvent(
         post: CreatePostModel(
-          kind: PostKind.post.name.toUpperCase(),
+          kind: (_mediaType == ComposeMediaType.video
+                  ? PostKind.reel
+                  : PostKind.post)
+              .name
+              .toUpperCase(),
           caption: _captionController.text.trim(),
           soundId: _mediaType == ComposeMediaType.video
               ? null

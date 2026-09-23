@@ -16,7 +16,8 @@ class PostBloc extends Bloc<PostEvent, PostState> {
   PostBloc() : super(PostInitialState()) {
     on<CreatePostEvent>(_processCreatePost, transformer: droppable());
     on<FetchPostsEvent>(
-      (event, emit) => _processFetchPosts(cursor: null, emit: emit),
+      (event, emit) =>
+          _processFetchPosts(cursor: null, emit: emit, completer: event.completer),
       transformer: droppable(),
     );
     on<FetchMovePostsEvent>(
@@ -24,22 +25,36 @@ class PostBloc extends Bloc<PostEvent, PostState> {
       transformer: droppable(),
     );
     on<GetPostDetailsEvent>(_processFetchPostDetails, transformer: droppable());
+    // concurrent(), not droppable(): a single PostBloc is shared across
+    // every tile in the feed, so a global droppable() here would drop a
+    // toggle on post B while post A's toggle is still in flight. Re-entry
+    // on the *same* post is already guarded at the widget level
+    // (ReelsTile's _isLikeSubmitting/etc.), so concurrent handling across
+    // different posts is safe.
     on<TogglePostLikeStatusEvent>(
       _processTogglePostLikeStatus,
-      transformer: droppable(),
+      transformer: concurrent(),
     );
     on<TogglePostBookMarkStatusEvent>(
       _processTogglePostBookMarkStatus,
-      transformer: droppable(),
+      transformer: concurrent(),
     );
     on<TogglePostRepostStatusEvent>(
       _processTogglePostRepostStatus,
-      transformer: droppable(),
+      transformer: concurrent(),
     );
     on<SyncPostEvent>((event, emit) => emit(_applyPost(state, event.post)));
   }
 
   final PostRepository _repo = PostRepository();
+
+  /// Reloads the feed's first page and resolves once it has settled
+  /// (loaded or failed) — lets a caller (e.g. pull-to-refresh) await it.
+  Future<void> refresh() {
+    final completer = Completer<void>();
+    add(FetchPostsEvent(completer: completer));
+    return completer.future;
+  }
 
   /// Toggles [post]'s like status and resolves once the request has
   /// settled (reconciled or rolled back) — lets a caller drive a
@@ -91,6 +106,7 @@ class PostBloc extends Bloc<PostEvent, PostState> {
   Future<void> _processFetchPosts({
     String? cursor,
     required Emitter<PostState> emit,
+    Completer<void>? completer,
   }) async {
     final isFirstPage = cursor == null;
     if (isFirstPage) emit(PostLoadingState());
@@ -109,6 +125,8 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     } catch (e) {
       final message = e is AppException ? e.message : 'Failed to load posts';
       emit(PostErrorState(message: message));
+    } finally {
+      completer?.complete();
     }
   }
 
@@ -148,7 +166,21 @@ class PostBloc extends Bloc<PostEvent, PostState> {
         _applyPost(state, optimistic.copyWith(likesCount: result.likesCount)),
       );
     } on AppException {
-      emit(_applyPost(state, original));
+      // Revert only the fields this toggle owns, applied on top of
+      // whatever the post looks like *now* — not a wholesale replace with
+      // the stale `original` snapshot, which would also clobber an
+      // unrelated field a concurrent SyncPostEvent updated in the
+      // meantime while this request was in flight.
+      final current = _findPost(state, original.id) ?? original;
+      emit(
+        _applyPost(
+          state,
+          current.copyWith(
+            likedByMe: original.likedByMe,
+            likesCount: original.likesCount,
+          ),
+        ),
+      );
     } finally {
       event.completer?.complete();
     }
@@ -177,6 +209,23 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     };
   }
 
+  /// The current version of the post with [postId] in whichever of
+  /// [current]'s post-bearing states holds it, or null if [current]
+  /// doesn't reference this post.
+  PostModel? _findPost(PostState current, String postId) {
+    switch (current) {
+      case PostsLoadedState():
+        for (final item in current.items) {
+          if (item.post.id == postId) return item.post;
+        }
+        return null;
+      case PostDetailsLoadedState() when current.post.id == postId:
+        return current.post;
+      default:
+        return null;
+    }
+  }
+
   Future<void> _processTogglePostBookMarkStatus(
     TogglePostBookMarkStatusEvent event,
     Emitter emit,
@@ -200,7 +249,16 @@ class PostBloc extends Bloc<PostEvent, PostState> {
         ),
       );
     } on AppException {
-      emit(_applyPost(state, original));
+      final current = _findPost(state, original.id) ?? original;
+      emit(
+        _applyPost(
+          state,
+          current.copyWith(
+            bookmarkedByMe: original.bookmarkedByMe,
+            bookmarksCount: original.bookmarksCount,
+          ),
+        ),
+      );
     } finally {
       event.completer?.complete();
     }
@@ -232,7 +290,16 @@ class PostBloc extends Bloc<PostEvent, PostState> {
         ),
       );
     } on AppException {
-      emit(_applyPost(state, original));
+      final current = _findPost(state, original.id) ?? original;
+      emit(
+        _applyPost(
+          state,
+          current.copyWith(
+            repostedByMe: original.repostedByMe,
+            repostsCount: original.repostsCount,
+          ),
+        ),
+      );
     } finally {
       event.completer?.complete();
     }

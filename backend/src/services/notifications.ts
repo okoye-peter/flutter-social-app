@@ -37,6 +37,10 @@ export interface CreateNotificationInput {
   commentId?: string;
   conversationId?: string;
   messageId?: string;
+  // Rides in the push data payload only — not persisted on the Notification
+  // row (no `call_id` column), since the Call row itself is the source of
+  // truth and this is just a pointer for the client to route a tap/wake.
+  callId?: string;
 }
 
 function buildNotificationCopy(type: NotificationType, actorName: string): { title: string; body: string } {
@@ -68,7 +72,7 @@ function buildNotificationCopy(type: NotificationType, actorName: string): { tit
 // Push failure (or no registered devices) must never abort the action that
 // triggered it, so sendNotification's errors are swallowed here.
 export async function createNotification(input: CreateNotificationInput): Promise<void> {
-  const { userId, actorId, type, postId, commentId, conversationId, messageId } = input;
+  const { userId, actorId, type, postId, commentId, conversationId, messageId, callId } = input;
   if (actorId && actorId === userId) return; // suppress self-notifications
 
   await prisma.notification.create({ data: { userId, actorId, type, postId, commentId, conversationId, messageId } });
@@ -79,10 +83,12 @@ export async function createNotification(input: CreateNotificationInput): Promis
   try {
     await sendNotification(userId, title, body, {
       type,
+      ...(actorId ? { actorId } : {}),
       ...(postId ? { postId } : {}),
       ...(commentId ? { commentId } : {}),
       ...(conversationId ? { conversationId } : {}),
       ...(messageId ? { messageId } : {}),
+      ...(callId ? { callId } : {}),
     });
   } catch {
     // no registered devices, or FCM failure — fine, the in-app row already exists.

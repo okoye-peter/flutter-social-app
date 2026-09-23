@@ -68,3 +68,51 @@ export function uploadImage(buffer: Buffer, folder: string): Promise<string> {
 export function uploadAttachment(buffer: Buffer, folder: string): Promise<string> {
   return upload(buffer, folder, 'auto');
 }
+
+export type ChatAttachmentType = 'IMAGE' | 'VIDEO' | 'VOICE_NOTE';
+
+export interface SignedUploadAuth {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  folder: string;
+  allowedFormats: string;
+  resourceType: 'image' | 'video';
+}
+
+// Cloudinary has no separate 'audio' resource type — voice notes upload
+// under 'video' like any other audio/video container; allowedFormats is
+// what actually distinguishes a VOICE_NOTE from a VIDEO server-side.
+const CHAT_ATTACHMENT_PROFILES: Record<ChatAttachmentType, { resourceType: 'image' | 'video'; formats: string[] }> = {
+  IMAGE: { resourceType: 'image', formats: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'gif'] },
+  VIDEO: { resourceType: 'video', formats: ['mp4', 'mov', 'webm', 'm4v', '3gp'] },
+  VOICE_NOTE: { resourceType: 'video', formats: ['m4a', 'aac', 'mp3', 'wav', 'ogg'] },
+};
+
+// Mints a signed direct-upload authorization for a chat attachment, so the
+// client can upload straight to Cloudinary instead of proxying bytes
+// through our server. Callers MUST run assertCanPostToConversation first —
+// this function itself does no authorization, only signing.
+export function createChatAttachmentUploadAuth(conversationId: string, type: ChatAttachmentType): SignedUploadAuth {
+  const { resourceType, formats } = CHAT_ATTACHMENT_PROFILES[type];
+  const config = cloudinary.config();
+  const timestamp = Math.floor(Date.now() / 1000);
+  const folder = `chat-attachments/${conversationId}`;
+  const allowedFormats = formats.join(',');
+
+  const signed = cloudinary.utils.sign_request(
+    { timestamp, folder, allowed_formats: allowedFormats },
+    { api_key: config.api_key!, api_secret: config.api_secret! },
+  );
+
+  return {
+    cloudName: config.cloud_name!,
+    apiKey: signed.api_key,
+    timestamp: signed.timestamp,
+    signature: signed.signature,
+    folder: signed.folder,
+    allowedFormats,
+    resourceType,
+  };
+}

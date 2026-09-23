@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { optionalString } from './shared.js';
 import { MAX_COMMENT_LENGTH } from '../services/comment.js';
 
 function checkContent(content: string | undefined, ctx: z.RefinementCtx) {
@@ -12,9 +13,9 @@ function checkContent(content: string | undefined, ctx: z.RefinementCtx) {
 }
 
 export const createCommentSchema = z
-  .object({ content: z.string().optional(), replyToId: z.string().optional() })
+  .object({ content: optionalString(), replyToId: optionalString() })
   .superRefine((data, ctx) => checkContent(data.content, ctx));
 
 export const updateCommentSchema = z
-  .object({ content: z.string().optional() })
+  .object({ content: optionalString() })
   .superRefine((data, ctx) => checkContent(data.content, ctx));

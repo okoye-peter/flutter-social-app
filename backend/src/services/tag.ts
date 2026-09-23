@@ -4,7 +4,8 @@ import { isUniqueConstraintError, isRecordNotFoundError } from '../lib/prisma-er
 import { decodeCursor, buildCursorWhere, toPage, parseLimit, type CursorPage } from '../lib/pagination.js';
 import { assertNotBlocked } from './block.js';
 import { createNotification } from './notifications.js';
-import type { PostTag, Post } from '../../generated/prisma/index.js';
+import { VIEWER_STATE_INCLUDE, withViewerState, type PostWithViewerState } from './post-view-state.js';
+import type { PostTag } from '../../generated/prisma/index.js';
 
 export const MAX_TAGS_PER_POST = 20;
 
@@ -49,8 +50,11 @@ export async function removeTag(postId: string, ownerId: string, userId: string)
 
 export async function listTagged(
   userId: string,
+  viewerId: string,
   query: { cursor?: string; limit?: string },
-): Promise<CursorPage<Post>> {
+): Promise<CursorPage<PostWithViewerState>> {
+  await assertNotBlocked(userId, viewerId);
+
   const limit = parseLimit(query.limit);
   const cursor = decodeCursor(query.cursor);
 
@@ -58,9 +62,9 @@ export async function listTagged(
     where: { userId, ...buildCursorWhere(cursor) },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
-    include: { post: true },
+    include: { post: { include: VIEWER_STATE_INCLUDE(viewerId) } },
   });
 
   const page = toPage(rows, limit);
-  return { items: page.items.map((row) => row.post), nextCursor: page.nextCursor };
+  return { items: page.items.map((row) => withViewerState(row.post)), nextCursor: page.nextCursor };
 }

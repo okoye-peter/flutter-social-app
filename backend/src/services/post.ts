@@ -4,7 +4,10 @@ import { decodeCursor, buildCursorWhere, toPage, parseLimit, type CursorPage } f
 import { assertNotBlocked } from './block.js';
 import { uploadAttachment } from './cloudinary.js';
 import { addTags } from './tag.js';
+import { VIEWER_STATE_INCLUDE, withViewerState, type PostAuthor, type PostWithViewerState } from './post-view-state.js';
 import type { Post, PostKind, MediaType } from '../../generated/prisma/index.js';
+
+export type { PostAuthor, PostWithViewerState } from './post-view-state.js';
 
 export const MAX_CAPTION_LENGTH = 2200;
 
@@ -17,17 +20,6 @@ export interface CreatePostInput {
   soundId?: string;
 }
 
-// Deliberately excludes password/email/phoneNumber/fcmToken — this goes
-// out to every viewer of the feed, not just the post's own author.
-export type PostAuthor = { id: string; name: string; username: string; image: string };
-
-export type PostWithViewerState = Post & {
-  user: PostAuthor;
-  likedByMe: boolean;
-  bookmarkedByMe: boolean;
-  repostedByMe: boolean;
-};
-
 export interface RepostInfo {
   id: string;
   comment: string | null;
@@ -38,30 +30,6 @@ export interface RepostInfo {
 export interface FeedItem {
   post: PostWithViewerState;
   repost: RepostInfo | null;
-}
-
-const VIEWER_STATE_INCLUDE = (viewerId: string) => ({
-  user: { select: { id: true, name: true, username: true, image: true } },
-  likes: { where: { userId: viewerId }, select: { id: true } },
-  bookmarks: { where: { userId: viewerId }, select: { id: true } },
-  reposts: { where: { userId: viewerId }, select: { id: true } },
-});
-
-type PostWithRawViewerState = Post & {
-  user: PostAuthor;
-  likes: { id: string }[];
-  bookmarks: { id: string }[];
-  reposts: { id: string }[];
-};
-
-function withViewerState(post: PostWithRawViewerState): PostWithViewerState {
-  const { likes, bookmarks, reposts, ...rest } = post;
-  return {
-    ...rest,
-    likedByMe: likes.length > 0,
-    bookmarkedByMe: bookmarks.length > 0,
-    repostedByMe: reposts.length > 0,
-  };
 }
 
 function deriveMediaType(mimetype: string): MediaType {
@@ -115,6 +83,31 @@ export async function getPost(postId: string, viewerId: string): Promise<PostWit
   return withViewerState(post);
 }
 
+export interface PostPreview {
+  caption: string;
+  mediaType: MediaType;
+  mediaUrl: string | null;
+  thumbnailUrl: string | null;
+  user: { name: string; username: string };
+}
+
+// Unauthenticated preview for the public share/link-unfurl page — no
+// viewer-specific state (likedByMe etc.), so no viewerId/block check.
+export async function getPostPreview(postId: string): Promise<PostPreview> {
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: {
+      caption: true,
+      mediaType: true,
+      mediaUrl: true,
+      thumbnailUrl: true,
+      user: { select: { name: true, username: true } },
+    },
+  });
+  if (!post) throw new HttpError(404, 'Post not found');
+  return post;
+}
+
 export async function deletePost(postId: string, userId: string): Promise<void> {
   const post = await prisma.post.findUnique({ where: { id: postId }, select: { userId: true } });
   if (!post) return; // already gone — idempotent no-op
@@ -134,24 +127,26 @@ export async function deletePost(postId: string, userId: string): Promise<void> 
 // merged top `limit + 1` (and therefore hasMore/nextCursor) is accurate.
 type FeedCandidate = { createdAt: Date; id: string; item: FeedItem };
 
-export async function listFeed(
+function notBlockedEitherWay(viewerId: string) {
+  return {
+    NOT: {
+      OR: [{ blocking: { some: { blockedId: viewerId } } }, { blockedBy: { some: { blockerId: viewerId } } }],
+    },
+  };
+}
+
+async function fetchFeedCandidates(
+  postAuthorFilter: object,
+  repostAuthorFilter: object,
   viewerId: string,
-  query: { kind?: string; cursor?: string; limit?: string },
-): Promise<CursorPage<FeedItem>> {
-  const limit = parseLimit(query.limit);
-  const cursor = decodeCursor(query.cursor);
-  const kind = query.kind?.toUpperCase();
-  if (kind && kind !== 'POST' && kind !== 'REEL') {
-    throw new HttpError(400, "kind must be 'POST' or 'REEL'");
-  }
-
-  const following = await prisma.follow.findMany({ where: { followerId: viewerId }, select: { followingId: true } });
-  const authorIds = [viewerId, ...following.map((f) => f.followingId)];
-
+  kind: string | undefined,
+  cursor: ReturnType<typeof decodeCursor>,
+  limit: number,
+): Promise<FeedCandidate[]> {
   const [postRows, repostRows] = await Promise.all([
     prisma.post.findMany({
       where: {
-        userId: { in: authorIds },
+        ...postAuthorFilter,
         ...(kind ? { kind: kind as PostKind } : {}),
         ...buildCursorWhere(cursor),
       },
@@ -161,7 +156,7 @@ export async function listFeed(
     }),
     prisma.repost.findMany({
       where: {
-        userId: { in: authorIds },
+        ...repostAuthorFilter,
         ...(kind ? { post: { kind: kind as PostKind } } : {}),
         ...buildCursorWhere(cursor),
       },
@@ -189,13 +184,68 @@ export async function listFeed(
     },
   }));
 
-  const merged = [...postCandidates, ...repostCandidates].sort((a, b) => {
+  return [...postCandidates, ...repostCandidates].sort((a, b) => {
     const byDate = b.createdAt.getTime() - a.createdAt.getTime();
     return byDate !== 0 ? byDate : b.id.localeCompare(a.id);
   });
+}
+
+export interface FeedPage extends CursorPage<FeedItem> {
+  // True when this page is the discovery fallback below rather than posts
+  // from people the viewer follows — lets the client label it accordingly.
+  isDiscovery: boolean;
+}
+
+// Marks a cursor as belonging to the discovery feed (see below) rather than
+// the personalized one, so pagination stays in discovery mode across pages
+// without re-deriving that decision from scratch on every request.
+const DISCOVERY_CURSOR_PREFIX = 'discover_';
+
+function discoveryFilter(viewerId: string) {
+  return { userId: { not: viewerId }, user: notBlockedEitherWay(viewerId) };
+}
+
+export async function listFeed(
+  viewerId: string,
+  query: { kind?: string; cursor?: string; limit?: string },
+): Promise<FeedPage> {
+  const limit = parseLimit(query.limit);
+  const kind = query.kind?.toUpperCase();
+  if (kind && kind !== 'POST' && kind !== 'REEL') {
+    throw new HttpError(400, "kind must be 'POST' or 'REEL'");
+  }
+
+  const rawCursor = query.cursor;
+  const forcedDiscovery = rawCursor?.startsWith(DISCOVERY_CURSOR_PREFIX) ?? false;
+  const cursor = decodeCursor(forcedDiscovery ? rawCursor!.slice(DISCOVERY_CURSOR_PREFIX.length) : rawCursor);
+
+  let merged: FeedCandidate[] = [];
+  if (!forcedDiscovery) {
+    const following = await prisma.follow.findMany({ where: { followerId: viewerId }, select: { followingId: true } });
+    const authorIds = [viewerId, ...following.map((f) => f.followingId)];
+    merged = await fetchFeedCandidates(
+      { userId: { in: authorIds } },
+      { userId: { in: authorIds } },
+      viewerId,
+      kind,
+      cursor,
+      limit,
+    );
+  }
+
+  // Nothing from people the viewer follows — typically a brand-new account
+  // that hasn't followed anyone yet. Fall back to recent public posts, the
+  // way Instagram fills a new user's feed before they follow anyone. Only
+  // *enters* discovery on the true first page (no cursor); once in it,
+  // `forcedDiscovery` keeps every later page there via the cursor marker.
+  const isDiscovery = forcedDiscovery || (merged.length === 0 && !cursor);
+  if (isDiscovery) {
+    merged = await fetchFeedCandidates(discoveryFilter(viewerId), discoveryFilter(viewerId), viewerId, kind, cursor, limit);
+  }
 
   const page = toPage(merged, limit);
-  return { items: page.items.map((c) => c.item), nextCursor: page.nextCursor };
+  const nextCursor = page.nextCursor && isDiscovery ? `${DISCOVERY_CURSOR_PREFIX}${page.nextCursor}` : page.nextCursor;
+  return { items: page.items.map((c) => c.item), nextCursor, isDiscovery };
 }
 
 export async function listUserPosts(

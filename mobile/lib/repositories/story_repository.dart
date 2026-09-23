@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:social_app/core/di/service_locator.dart';
-import 'package:social_app/core/errors/app_exception.dart';
+import 'package:social_app/core/errors/dio_error_mapper.dart';
 import 'package:social_app/core/utils/media_upload.dart';
 import 'package:social_app/models/create_story_model.dart';
 import 'package:social_app/models/story_model.dart';
@@ -16,7 +16,7 @@ class StoryRepository {
           .map((g) => StoryGroupModel.fromJson(g as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
-      throw _mapError(e, 'Failed to load stories');
+      throw e.toAppException('Failed to load stories');
     }
   }
 
@@ -24,17 +24,8 @@ class StoryRepository {
     try {
       await _dio.post('/stories/$storyId/views');
     } on DioException catch (e) {
-      throw _mapError(e, 'Failed to mark story as viewed');
+      throw e.toAppException('Failed to mark story as viewed');
     }
-  }
-
-  AppException _mapError(DioException e, String fallback) {
-    final data = e.response?.data;
-    final message = data is Map ? data['error'] as String? : null;
-    return AppException(
-      message ?? fallback,
-      statusCode: e.response?.statusCode,
-    );
   }
 
   Future<void> createStory(CreateStoryModel story) async {
@@ -48,7 +39,7 @@ class StoryRepository {
       });
       await _dio.post('/stories', data: formData);
     } on DioException catch (e) {
-      throw _mapError(e, 'Failed to create story');
+      throw e.toAppException('Failed to create story');
     }
   }
 }

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:social_app/core/router/app_routes.dart';
 import 'package:social_app/core/utils/validators.dart';
 import 'package:social_app/core/widgets/auth_scaffold.dart';
 import 'package:social_app/core/widgets/auth_submit_button.dart';
 import 'package:social_app/core/widgets/auth_text_field.dart';
+import 'package:social_app/viewmodels/auth/auth_bloc.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -18,6 +20,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _emailController = TextEditingController();
   bool _isLoading = false;
   bool _emailSent = false;
+  String? _errorText;
 
   @override
   void dispose() {
@@ -29,13 +32,37 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     if (!_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
 
-    setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 900));
+    setState(() {
+      _isLoading = true;
+      _errorText = null;
+    });
+
+    final email = _emailController.text.trim();
+    final state = await context.read<AuthBloc>().addAndAwait(
+      RequestPasswordResetEvent(email: email),
+      (s) => s is OtpSentState,
+    );
     if (!mounted) return;
+
+    if (state is AuthErrorState) {
+      setState(() {
+        _isLoading = false;
+        _errorText = state.errorMessage;
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = false;
       _emailSent = true;
     });
+  }
+
+  void _continueToResetPassword() {
+    context.push(
+      AppRoutes.resetPassword,
+      extra: _emailController.text.trim(),
+    );
   }
 
   void _backToLogin() {
@@ -53,9 +80,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return AuthScaffold(
       title: _emailSent ? 'Check your email' : 'Forgot password?',
       subtitle: _emailSent
-          ? 'We sent a password reset link to ${_emailController.text.trim()}.'
+          ? 'We sent a password reset code to ${_emailController.text.trim()}.'
           : "Enter the email linked to your account and we'll send you a "
-                "reset link.",
+                "reset code.",
       showBackButton: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -104,9 +131,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             validator: validateEmail,
             onFieldSubmitted: (_) => _onSendResetLink(),
           ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _errorText!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
           const SizedBox(height: 24),
           AuthSubmitButton(
-            label: 'Send Reset Link',
+            label: 'Send Reset Code',
             isLoading: _isLoading,
             onPressed: _onSendResetLink,
           ),
@@ -139,6 +173,23 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           style: TextStyle(color: colorScheme.onSurfaceVariant, height: 1.4),
         ),
         const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: FilledButton(
+            onPressed: _continueToResetPassword,
+            style: FilledButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: const Text(
+              'Enter Code',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           height: 54,

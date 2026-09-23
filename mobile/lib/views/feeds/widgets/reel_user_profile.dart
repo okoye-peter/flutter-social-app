@@ -67,23 +67,23 @@ class ReelUserProfile extends StatelessWidget {
                 ),
               // ),
               const SizedBox(width: 4),
-              if (!isFollowing)
-                OutlinedButton(
-                  onPressed: onTapFollow,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white),
-                    minimumSize: const Size(0, 30),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text(
-                    'Follow',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                ),
+              // if (!isFollowing)
+              //   OutlinedButton(
+              //     onPressed: onTapFollow,
+              //     style: OutlinedButton.styleFrom(
+              //       foregroundColor: Colors.white,
+              //       side: const BorderSide(color: Colors.white),
+              //       minimumSize: const Size(0, 30),
+              //       padding: const EdgeInsets.symmetric(horizontal: 14),
+              //       shape: RoundedRectangleBorder(
+              //         borderRadius: BorderRadius.circular(8),
+              //       ),
+              //     ),
+              //     child: const Text(
+              //       'Follow',
+              //       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              //     ),
+              //   ),
             ],
           ),
           if (mediaType != MediaType.text && caption.trim().isNotEmpty) ...[

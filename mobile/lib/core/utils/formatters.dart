@@ -37,3 +37,14 @@ String formatCount(int count) {
   }
   return '${(count / 1000000).toStringAsFixed(count % 1000000 >= 100000 ? 1 : 0)}M';
 }
+
+/// Formats a timestamp as a short relative age, e.g. "now", "3m", "5h",
+/// "2d", "1w".
+String timeAgo(DateTime dateTime) {
+  final diff = DateTime.now().difference(dateTime);
+  if (diff.inMinutes < 1) return 'now';
+  if (diff.inHours < 1) return '${diff.inMinutes}m';
+  if (diff.inDays < 1) return '${diff.inHours}h';
+  if (diff.inDays < 7) return '${diff.inDays}d';
+  return '${(diff.inDays / 7).floor()}w';
+}

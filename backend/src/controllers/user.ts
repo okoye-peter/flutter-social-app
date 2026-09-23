@@ -22,6 +22,12 @@ export async function getProfile(req: Request, res: Response) {
 }
 
 type ListQuery = { cursor?: string; limit?: string };
+type SearchQuery = ListQuery & { q?: string };
+
+export async function searchUsers(req: Request, res: Response) {
+  const page = await userService.searchUsers(req.userId!, req.query as SearchQuery);
+  res.json(page);
+}
 
 export async function listUserPosts(req: Request, res: Response) {
   const page = await postService.listUserPosts((req.params.id as string), req.userId!, 'POST', req.query as ListQuery);
@@ -34,12 +40,12 @@ export async function listUserReels(req: Request, res: Response) {
 }
 
 export async function listUserReposts(req: Request, res: Response) {
-  const page = await repostService.listReposts((req.params.id as string), req.query as ListQuery);
+  const page = await repostService.listReposts((req.params.id as string), req.userId!, req.query as ListQuery);
   res.json(page);
 }
 
 export async function listUserTagged(req: Request, res: Response) {
-  const page = await tagService.listTagged((req.params.id as string), req.query as ListQuery);
+  const page = await tagService.listTagged((req.params.id as string), req.userId!, req.query as ListQuery);
   res.json(page);
 }
 

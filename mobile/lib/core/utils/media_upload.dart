@@ -1,4 +1,4 @@
-import 'package:social_app/core/enums/app_enums.dart';
+ import 'package:social_app/core/enums/app_enums.dart';
 
 /// File extension for a given [MediaType] — used as the filename
 /// `MultipartFile.fromBytes` uploads media under. Dio infers the correct

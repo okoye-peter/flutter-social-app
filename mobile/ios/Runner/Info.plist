@@ -7,7 +7,7 @@
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
-		<string>Social App</string>
+		<string>Community Zone</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>
@@ -73,10 +73,18 @@
 		<key>UIBackgroundModes</key>
 		<array>
 			<string>remote-notification</string>
+			<!-- voip: required for PKPushRegistry to function at all — blocked
+			     until an Apple Developer VoIP certificate/key exists (see
+			     AppDelegate.swift), but harmless to declare now. audio: keeps
+			     an active call's media/data alive while backgrounded. -->
+			<string>voip</string>
+			<string>audio</string>
 		</array>
 		<key>NSCameraUsageDescription</key>
 		<string>This app needs permission to access your camera.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>This app needs permission to access your gallery.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>This app needs permission to access your microphone to record voice messages.</string>
 	</dict>
 </plist>

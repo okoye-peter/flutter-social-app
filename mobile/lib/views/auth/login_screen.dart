@@ -55,7 +55,17 @@ class _LoginScreenState extends State<LoginScreen> {
         listener: (context, state) {
           if (state is AuthLoadedState) {
             AppToast.success('Authentication successfully');
-            context.go(AppRoutes.feeds);
+            // Return to wherever the user was headed before being
+            // bounced here to log in (e.g. a shared post's deep link),
+            // falling back to the default feed.
+            final redirectTo = GoRouterState.of(
+              context,
+            ).uri.queryParameters['redirect'];
+            context.go(
+              redirectTo != null && redirectTo.isNotEmpty
+                  ? redirectTo
+                  : AppRoutes.feeds,
+            );
           } else if (state is AuthErrorState) {
             AppToast.error(state.errorMessage);
           }

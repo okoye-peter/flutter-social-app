@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:social_app/core/di/service_locator.dart';
-import 'package:social_app/core/errors/app_exception.dart';
+import 'package:social_app/core/errors/dio_error_mapper.dart';
 import 'package:social_app/core/storage/token_storage.dart';
 import 'package:social_app/core/storage/user_cache.dart';
 import 'package:social_app/models/auth_response_model.dart';
@@ -29,7 +29,7 @@ class AuthRepository {
       await _persistAuth(auth);
       return auth;
     } on DioException catch (e) {
-      throw _mapError(e, 'Registration failed');
+      throw e.toAppException('Registration failed');
     }
   }
 
@@ -37,7 +37,7 @@ class AuthRepository {
     try {
       await _dio.post('/auth/otp/email/send', data: {'email': email});
     } on DioException catch (e) {
-      throw _mapError(e, 'Failed to send verification code');
+      throw e.toAppException('Failed to send verification code');
     }
   }
 
@@ -48,7 +48,7 @@ class AuthRepository {
         data: {'email': email, 'code': code},
       );
     } on DioException catch (e) {
-      throw _mapError(e, 'Invalid verification code');
+      throw e.toAppException('Invalid verification code');
     }
   }
 
@@ -59,7 +59,7 @@ class AuthRepository {
         data: {'phoneNumber': phoneNumber},
       );
     } on DioException catch (e) {
-      throw _mapError(e, 'Failed to send verification code');
+      throw e.toAppException('Failed to send verification code');
     }
   }
 
@@ -70,7 +70,30 @@ class AuthRepository {
         data: {'phoneNumber': phoneNumber, 'code': code},
       );
     } on DioException catch (e) {
-      throw _mapError(e, 'Invalid verification code');
+      throw e.toAppException('Invalid verification code');
+    }
+  }
+
+  Future<void> forgotPassword(String email) async {
+    try {
+      await _dio.post('/auth/forgot-password', data: {'email': email});
+    } on DioException catch (e) {
+      throw e.toAppException('Failed to send reset code');
+    }
+  }
+
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      await _dio.post(
+        '/auth/reset-password',
+        data: {'email': email, 'code': code, 'newPassword': newPassword},
+      );
+    } on DioException catch (e) {
+      throw e.toAppException('Invalid or expired code');
     }
   }
 
@@ -84,7 +107,7 @@ class AuthRepository {
       await _persistAuth(auth);
       return auth;
     } on DioException catch (e) {
-      throw _mapError(e, 'Login failed');
+      throw e.toAppException('Login failed');
     }
   }
 
@@ -95,7 +118,7 @@ class AuthRepository {
         data: {'refreshToken': _tokenStorage.current?.refreshToken},
       );
     } on DioException catch (e) {
-      throw _mapError(e, 'Error logging out');
+      throw e.toAppException('Error logging out');
     } finally {
       await _tokenStorage.clear();
       await _userCache.clear();
@@ -111,7 +134,7 @@ class AuthRepository {
       await _userCache.save(user);
       return user;
     } on DioException catch (e) {
-      throw _mapError(e, 'Error fetching authenticated user');
+      throw e.toAppException('Error fetching authenticated user');
     }
   }
 
@@ -123,14 +146,5 @@ class AuthRepository {
       ),
     );
     await _userCache.save(auth.user);
-  }
-
-  AppException _mapError(DioException e, String fallback) {
-    final data = e.response?.data;
-    final message = data is Map ? data['error'] as String? : null;
-    return AppException(
-      message ?? fallback,
-      statusCode: e.response?.statusCode,
-    );
   }
 }
