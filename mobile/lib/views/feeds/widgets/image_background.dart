@@ -1,5 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:social_app/views/feeds/widgets/reel_media_shimmer.dart';
 
 class ImageBackground extends StatelessWidget {

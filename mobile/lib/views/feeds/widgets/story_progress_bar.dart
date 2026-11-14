@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Row of Instagram-style segmented progress bars across the top of the
 /// story viewer — one segment per story, filled for past stories, animated

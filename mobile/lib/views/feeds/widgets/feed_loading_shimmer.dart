@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:shimmer/shimmer.dart';
 
 /// Skeleton placeholder mirroring [ReelsTile]'s full-bleed media block

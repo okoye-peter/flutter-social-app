@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Rounded, filled text field styled for the auth screens, with a built-in
 /// show/hide toggle when [isPassword] is set.

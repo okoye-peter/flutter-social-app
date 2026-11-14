@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:social_app/views/feeds/widgets/reel_text_shadow.dart';
 
 class ReelAction extends StatelessWidget {

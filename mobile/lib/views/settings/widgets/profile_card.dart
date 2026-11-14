@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:social_app/core/utils/validators.dart';
 import 'package:social_app/core/widgets/auth_submit_button.dart';
 import 'package:social_app/core/widgets/auth_text_field.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A tappable row for a secondary composer option (add sound, tag
 /// people, etc.) — icon badge, label, optional subtitle, chevron.

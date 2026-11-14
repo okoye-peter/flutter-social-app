@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:social_app/core/di/service_locator.dart';
 import 'package:social_app/core/enums/app_enums.dart';
 import 'package:social_app/core/storage/user_cache.dart';

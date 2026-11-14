@@ -1,5 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Circular avatar that renders [source] as a network image when it
 /// looks like a URL (starts with "http"), or as initials text

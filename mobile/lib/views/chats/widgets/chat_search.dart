@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Pill-shaped search field shared by the chat list and new-chat screens —
 /// visually matches [SearchScreen]'s inline search bar but theme-aware

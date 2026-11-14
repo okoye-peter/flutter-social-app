@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Small drag handle shown at the top of [CommentBottomSheet].
 class CommentSheetHandle extends StatelessWidget {

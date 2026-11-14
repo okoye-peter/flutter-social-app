@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Full-width primary action button used across the auth screens, with a
 /// built-in loading spinner state.

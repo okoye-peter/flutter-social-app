@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:social_app/core/utils/formatters.dart';
 import 'package:social_app/core/widgets/user_avatar.dart';
 import 'package:social_app/models/comment_model.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Shadow applied to reel overlay text/icons so they stay legible over
 /// arbitrary video content instead of a solid app surface.

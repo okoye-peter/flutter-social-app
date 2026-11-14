@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:social_app/core/helpers/app_toast.dart';
 import 'package:social_app/models/message_model.dart';
